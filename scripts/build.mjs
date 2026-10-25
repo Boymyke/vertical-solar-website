@@ -59,7 +59,16 @@ function page(file) {
   const m = raw.match(/^<!--\s*(\{[\s\S]*?\})\s*-->/);
   if (!m) throw new Error(`Missing front matter in ${file}`);
   const fm = JSON.parse(m[1]);
-  const body = raw.slice(m[0].length).trim();
+  let body = raw.slice(m[0].length).trim();
+  // Optional photo beside the page title: "photo": ["/images/gen/name", "Alt text", "object-position"]
+  if (fm.photo) {
+    const [src, alt, pos] = fm.photo;
+    body = body.replace(/<section class="page-hero">\s*<div class="wrap">([\s\S]*?)<\/div>\s*<\/section>/, (_, inner) =>
+      `<section class="page-hero with-photo"><div class="wrap"><div class="page-hero-text">${inner}</div>` +
+      `<figure class="page-hero-photo"><picture><source type="image/webp" srcset="${src}-768.webp 768w, ${src}-1536.webp 1536w" sizes="(max-width: 860px) 100vw, 46vw">` +
+      `<img src="${src}-1536.webp" alt="${esc(alt)}" width="1536" height="1024" fetchpriority="high" decoding="async"${pos ? ` style="object-position:${pos}"` : ''}></picture></figure></div></section>`);
+    if (!fm.image) fm.image = `${src}-1536.webp`;
+  }
   const url = SITE + (fm.path === '/' ? '/' : fm.path);
   const og = fm.image ? (fm.image.startsWith('http') ? fm.image : SITE + fm.image) : `${SITE}/images/og-image.jpg`;
   const graph = [ORG, ...(fm.local ? LOCAL : []), ...(fm.ld || [])];

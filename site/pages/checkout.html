@@ -17,7 +17,7 @@
         <fieldset style="border:0;padding:0;margin:0" data-pay-options><legend class="field" style="margin-bottom:8px"><strong>Payment</strong></legend>
           <div class="choice-grid">
             <label class="choice"><input type="radio" name="payment_method" value="transfer" checked><span><i class="ri-bank-line" aria-hidden="true"></i>Bank transfer<small>We confirm by phone, then send account details</small></span></label>
-            <label class="choice" data-paystack-option hidden><input type="radio" name="payment_method" value="paystack"><span><i class="ri-bank-card-line" aria-hidden="true"></i>Pay online<small>Card, transfer or USSD via Paystack</small></span></label>
+            <label class="choice is-disabled" data-paystack-option><input type="radio" name="payment_method" value="paystack" disabled aria-describedby="card-note"><span><i class="ri-bank-card-line" aria-hidden="true"></i>Pay by card<small id="card-note" data-card-note>Coming soon</small></span></label>
           </div></fieldset>
         <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div class="form-status" role="status" hidden></div>

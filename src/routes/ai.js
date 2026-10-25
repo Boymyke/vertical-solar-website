@@ -2,7 +2,7 @@
 import { json, ok, fail, readJson, clientIp } from '../lib/http.js';
 import { rateLimit, notify, requirePerm } from '../lib/auth.js';
 import { getSettings, SITE_PAGES } from '../lib/site.js';
-import { str, num, parseJSON, now, randomToken, naira } from '../lib/util.js';
+import { str, num, parseJSON, now, randomToken, naira, sha256 } from '../lib/util.js';
 import { upsertLead } from './public.js';
 
 const LANG_NAMES = { en: 'English', ig: 'Igbo', ha: 'Hausa', yo: 'Yoruba', pcm: 'Nigerian Pidgin English' };
@@ -121,6 +121,53 @@ export function registerAI(r) {
     if (!chat) fail(404, 'Chat not found');
     const { results } = await env.DB.prepare(`SELECT id, role, content, created_at FROM chat_messages WHERE chat_id=? AND id>? AND role IN ('assistant','agent') ORDER BY id`).bind(id, after).all();
     return json({ status: chat.status, messages: results });
+  });
+
+  // Machine translation for website text the built-in dictionaries do not cover yet (e.g. new blog posts).
+  // Results are cached in D1, so each string is translated once per language.
+  r.post('/api/public/translate', async (req, env) => {
+    const b = await readJson(req, 64 * 1024);
+    const lang = ['ig', 'ha', 'yo'].includes(b.lang) ? b.lang : null;
+    if (!lang) fail(400, 'Unsupported language');
+    const items = (Array.isArray(b.items) ? b.items : []).slice(0, 60).map((x) => String(x || '').slice(0, 2000));
+    if (!items.length) return json({ items: [] });
+    const hashes = await Promise.all(items.map((t) => sha256(t)));
+    const out = new Array(items.length).fill(null);
+    const ph = hashes.map(() => '?').join(',');
+    const { results } = await env.DB.prepare(`SELECT hash, out FROM translations WHERE lang=? AND hash IN (${ph})`).bind(lang, ...hashes).all();
+    const cached = new Map(results.map((r) => [r.hash, r.out]));
+    const missing = [];
+    hashes.forEach((h, i) => { if (cached.has(h)) out[i] = cached.get(h); else missing.push(i); });
+    if (missing.length && env.AI) {
+      await rateLimit(env, `mt:${clientIp(req)}`, 40, 600);
+      const name = LANG_NAMES[lang];
+      for (let s0 = 0; s0 < missing.length; s0 += 15) {
+        const idx = missing.slice(s0, s0 + 15);
+        const src = idx.map((i) => items[i]);
+        let res = null;
+        try {
+          const r = await env.AI.run(env.AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+            messages: [
+              { role: 'system', content: `You translate website text for a Nigerian solar company from English into ${name}. Return ONLY a JSON array of strings, one translation per input, same order and length. Keep any HTML tags, attributes, numbers, prices (₦), brand names (Vertical Solar, Sola, Paystack, WhatsApp), units (kVA, kWh, Wp) and URLs exactly as they are. Use natural, everyday ${name}.` },
+              { role: 'user', content: JSON.stringify(src) }],
+            max_tokens: 3000, temperature: 0.2,
+          });
+          const txt = String(r.response ?? r.result?.response ?? '').trim();
+          const arr = JSON.parse(txt.slice(txt.indexOf('['), txt.lastIndexOf(']') + 1));
+          if (Array.isArray(arr) && arr.length === src.length) res = arr.map((x) => (typeof x === 'string' ? x : null));
+        } catch {}
+        if (!res) continue;
+        const stmts = [];
+        idx.forEach((i, k) => {
+          const v = res[k];
+          if (!v || v.length > 6000) return;
+          out[i] = v;
+          stmts.push(env.DB.prepare('INSERT OR REPLACE INTO translations (lang, hash, src, out) VALUES (?,?,?,?)').bind(lang, hashes[i], items[i], v));
+        });
+        if (stmts.length) await env.DB.batch(stmts);
+      }
+    }
+    return json({ items: out }, 200, { 'cache-control': 'no-store' });
   });
 
   r.post('/api/public/transcribe', async (req, env) => {

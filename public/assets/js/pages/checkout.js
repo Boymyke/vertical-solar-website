@@ -23,7 +23,10 @@ export default function (site) {
   if (site && !site.shop.enabled) { location.href = '/shop'; return; }
   summary(site);
   const pk = site?.shop?.paystack_public_key;
-  if (pk && site.shop.checkout_mode === 'paystack') $('[data-paystack-option]').hidden = false;
+  // Card payments stay visible but switched off until Paystack is configured in the CRM.
+  const cardOn = !!(pk && site.shop.checkout_mode === 'paystack');
+  const opt = $('[data-paystack-option]');
+  if (opt && cardOn) { opt.classList.remove('is-disabled'); opt.querySelector('input').disabled = false; opt.querySelector('[data-card-note]').textContent = 'Card, transfer or USSD via Paystack'; }
   const form = $('[data-checkout-form]');
   const status = $('.form-status', form);
   form.addEventListener('submit', async (e) => {

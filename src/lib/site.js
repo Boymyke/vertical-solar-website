@@ -15,9 +15,9 @@ export const DEFAULT_SETTINGS = {
     rc_number: '',
   },
   stats: [
+    { value: 10, suffix: '+', label: 'Years of experience' },
     { value: 500, suffix: '+', label: 'Installations completed' },
-    { value: 2017, suffix: '', label: 'Powering Nigeria since', plain: true },
-    { value: 5, suffix: '', label: 'Branches nationwide' },
+    { value: 98, suffix: '%', label: 'Client satisfaction' },
     { value: 24, suffix: '/7', label: 'Support & monitoring' },
   ],
   hero: {

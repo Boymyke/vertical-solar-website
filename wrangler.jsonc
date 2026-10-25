@@ -50,7 +50,7 @@
   "triggers": { "crons": ["*/10 * * * *", "0 6 * * *"] },
 
   "vars": {
-    "SITE_URL": "https://verticalsolar.com.ng",
+    "SITE_URL": "https://vertical-solar.aiwebcourse.workers.dev", // change to https://verticalsolar.com.ng when the domain is connected
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "AI_FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
     "STT_MODEL": "@cf/openai/whisper-large-v3-turbo"

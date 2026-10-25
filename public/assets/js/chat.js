@@ -24,9 +24,11 @@ function plain(text) {
   return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_#>`]/g, '').replace(/₦/g, 'naira ').trim();
 }
 
-function addMsg(role, text, { speakable = true } = {}) {
+function addMsg(role, text, { speakable = true, raw = false } = {}) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
+  // Visitor messages and AI/agent replies are already in the visitor's language — never re-translate them.
+  if (role === 'user' || raw) div.setAttribute('translate', 'no');
   if (role === 'user') div.textContent = text;
   else {
     const { html, links } = md(text);
@@ -69,7 +71,7 @@ async function send(text, mode = 'text') {
     const r = await api('/api/public/chat', { body: { chat_id: state.chatId, message: text, lang: currentLang(), mode, page: location.pathname, visitor_id: store.get('vs-vid') } });
     state.chatId = r.chat_id; store.set('vs-chat-id', r.chat_id);
     typing(false);
-    if (r.reply) { addMsg('bot', r.reply); saveHistory(); return r.reply; }
+    if (r.reply) { addMsg('bot', r.reply, { raw: true }); saveHistory(); return r.reply; }
     if (r.human) { addMsg('bot', 'A team member is handling this conversation and will reply here shortly.', { speakable: false }); }
   } catch (e) {
     typing(false);
@@ -190,7 +192,7 @@ async function pollAgent() {
   try {
     const r = await api(`/api/public/chat/${state.chatId}?after=${state.lastAgentId}`);
     for (const m of r.messages) {
-      if (m.role === 'agent' && m.id > state.lastAgentId) { const d = addMsg('agent', m.content, { speakable: true }); d.classList.remove('bot'); }
+      if (m.role === 'agent' && m.id > state.lastAgentId) { const d = addMsg('agent', m.content, { speakable: true, raw: true }); d.classList.remove('bot'); }
       state.lastAgentId = Math.max(state.lastAgentId, m.id);
     }
   } catch {}
@@ -230,7 +232,7 @@ function build() {
 
   let restored = [];
   try { restored = JSON.parse(sessionStorage.getItem('vs-chat-log') || '[]'); } catch {}
-  if (restored.length) { restored.forEach((m) => addMsg(m.r === 'user' ? 'user' : 'bot', m.t, { speakable: m.r !== 'user' })); chips.remove(); }
+  if (restored.length) { restored.forEach((m) => addMsg(m.r === 'user' ? 'user' : 'bot', m.t, { speakable: m.r !== 'user', raw: true })); chips.remove(); }
   else addMsg('bot', site?.ai?.greeting || "Hi, I'm Sola. Ask me about solar packages, prices, financing or caring for your system.", { speakable: false });
 }
 

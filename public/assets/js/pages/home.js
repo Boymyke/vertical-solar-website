@@ -17,10 +17,10 @@ export default async function (site) {
     },
   });
   const applyHero = () => {
-    if (!site?.hero || (document.documentElement.lang || 'en') !== 'en') return;
+    if (!site?.hero) return;
     const h1 = $('#hero-title'), sub = $('.hero .lede');
-    if (site.hero.headline && h1) { h1.textContent = site.hero.headline; h1.dataset.i18nEn = site.hero.headline; }
-    if (site.hero.subheadline && sub) { sub.textContent = site.hero.subheadline; sub.dataset.i18nEn = site.hero.subheadline; }
+    if (site.hero.headline && h1 && h1.textContent.trim() !== site.hero.headline.trim()) h1.textContent = site.hero.headline;
+    if (site.hero.subheadline && sub && sub.textContent.trim() !== site.hero.subheadline.trim()) sub.textContent = site.hero.subheadline;
   };
   applyHero();
   await fillBlocks(site);
