@@ -69,8 +69,9 @@ function lookup(dict, key) {
   return undefined; // undefined = missing (null = not translatable)
 }
 
+const inflight = new Set(); // lang|key already sent for machine translation
 function want(key) {
-  if (current === 'en' || !key || key.length > 4000) return;
+  if (current === 'en' || !key || key.length > 4000 || inflight.has(current + '|' + key)) return;
   (pending[current] ||= new Set()).add(key);
   scheduleMachine();
 }
@@ -150,7 +151,7 @@ function restore() {
 async function load(code) {
   if (code === 'en') return {};
   if (!dicts[code]) {
-    dicts[code] = fetch(`/assets/i18n/${code}.json?v=3`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
+    dicts[code] = fetch(`/assets/i18n/${code}.json?v=4`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
       try { Object.assign(d, JSON.parse(localStorage.getItem(`vs-mt-${code}`) || '{}')); } catch {}
       return d;
     });
@@ -165,7 +166,7 @@ function scheduleMachine() {
   mtTimer = setTimeout(async () => {
     const code = current, set = pending[code];
     if (!set || !set.size || code === 'en') return;
-    const keys = [...set].slice(0, 60); keys.forEach((k) => set.delete(k));
+    const keys = [...set].slice(0, 60); keys.forEach((k) => { set.delete(k); inflight.add(code + '|' + k); });
     try {
       const r = await fetch('/api/public/translate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lang: code, items: keys }) });
       if (!r.ok) return;
