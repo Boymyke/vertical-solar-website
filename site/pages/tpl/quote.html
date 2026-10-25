@@ -1,0 +1,22 @@
+<!--{
+  "title": "Your solar quote | Vertical Solar", "description": "Your quotation from Vertical Solar.", "path": "/tpl/quote", "out": "tpl/quote.html", "page": "quote", "noindex": true
+}-->
+<section class="section-tight" style="padding-top:32px">
+  <div class="wrap" style="max-width:960px">
+    <div class="btn-row no-print" style="justify-content:space-between;margin-bottom:20px" data-quote-actions hidden>
+      <span class="q-status" data-q-status></span>
+      <div class="btn-row"><button class="btn btn-ghost btn-sm" type="button" data-print><i class="ri-printer-line" aria-hidden="true"></i> Print</button><button class="btn btn-primary btn-sm" type="button" data-pdf><i class="ri-file-download-line" aria-hidden="true"></i> Download PDF</button></div>
+    </div>
+    <div data-quote-root><div class="skeleton" style="min-height:600px"></div></div>
+    <div class="card no-print" data-respond hidden style="margin-top:24px">
+      <h2 style="font-size:var(--fs-4)">Accept this quote</h2>
+      <p class="muted">Type your full name to accept. Our team will contact you to schedule installation and confirm payment.</p>
+      <form class="form" data-respond-form>
+        <div class="field"><label for="acc-name">Full name</label><input id="acc-name" name="name" required autocomplete="name"></div>
+        <div class="field"><label for="acc-note">Note (optional)</label><textarea id="acc-note" name="note" placeholder="Preferred installation date, questions…"></textarea></div>
+        <div class="btn-row"><button class="btn btn-primary" type="submit" data-action="accept"><i class="ri-check-line" aria-hidden="true"></i> Accept quote</button><button class="btn btn-ghost" type="button" data-decline>Decline</button></div>
+        <div class="form-status" role="status" hidden></div>
+      </form>
+    </div>
+  </div>
+</section>

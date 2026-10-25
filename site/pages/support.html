@@ -1,0 +1,40 @@
+<!--{
+  "title": "Solar Support — Report a Fault or Request Service | Vertical Solar",
+  "description": "Inverter beeping, batteries draining fast or panels not charging? Try our quick checks, then open a support ticket and a Vertical Solar technician will respond.",
+  "path": "/support", "page": "simple",
+  "crumbs": [["Home","/"],["Support","/support"]]
+}-->
+<section class="page-hero">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><i class="ri-arrow-right-s-line" aria-hidden="true"></i><span aria-current="page">Support</span></nav>
+    <h1>Customer support</h1>
+    <p class="lede">Something not right with your system? Try the quick checks, then open a ticket. Urgent safety issue? Call us immediately.</p>
+    <div class="btn-row" style="margin-top:20px"><a class="btn btn-primary" data-phone href="tel:08186311330"><i class="ri-phone-line" aria-hidden="true"></i> Call support</a><a class="btn btn-ghost" data-whatsapp="Hello, I need support with my solar system." href="#"><i class="ri-whatsapp-line" aria-hidden="true"></i> WhatsApp</a></div>
+  </div>
+</section>
+<section class="section-tight">
+  <div class="wrap split" style="align-items:start">
+    <div>
+      <h2 style="font-size:var(--fs-4)">Quick checks</h2>
+      <div class="accordion">
+        <details><summary>Inverter is beeping</summary><div>Switch off heavy appliances (AC, iron, pump, microwave). If the beeping stops, the system was overloaded. If it continues, note the error code on the screen and open a ticket. <a href="/blog/inverter-beeping-error-lights-what-they-mean">What the alarms mean</a>.</div></details>
+        <details><summary>Batteries run out early at night</summary><div>Check whether panels are dusty and whether new appliances were added. On cloudy days, enable grid or generator charging. If this happens every night, your battery may need a health check.</div></details>
+        <details><summary>No power from the inverter</summary><div>Check that the inverter is switched on, the battery breaker is on, and no breaker in the distribution board has tripped. Reset once only — if it trips again, stop and call us.</div></details>
+        <details><summary>Panels not charging</summary><div>Look at the PV reading on the inverter around midday. If it's zero on a sunny day, check the DC isolator near the inverter is on. Do not touch panel cables.</div></details>
+      </div>
+      <div class="warn-box" style="margin-top:20px"><i class="ri-alarm-warning-line" aria-hidden="true"></i><div>Smoke, burning smell, sparks or swollen batteries: switch off the inverter and battery breaker, keep everyone away, and call us now.</div></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:var(--fs-4)">Open a support ticket</h2>
+      <form class="form" data-form="ticket" data-success="replace" data-success-title="Ticket opened">
+        <div class="form-row"><div class="field"><label for="s-name">Full name</label><input id="s-name" name="name" required autocomplete="name"></div><div class="field"><label for="s-phone">Phone / WhatsApp</label><input id="s-phone" name="phone" type="tel" required autocomplete="tel"></div></div>
+        <div class="field"><label for="s-email">Email (optional)</label><input id="s-email" name="email" type="email" autocomplete="email"></div>
+        <div class="field"><label for="s-cat">Type of issue</label><select id="s-cat" name="category"><option value="fault">System fault / not working</option><option value="installation">Installation issue</option><option value="warranty">Warranty claim</option><option value="billing">Billing or payment</option><option value="general">General question</option></select></div>
+        <div class="field"><label for="s-sub">Subject</label><input id="s-sub" name="subject" required placeholder="e.g. Inverter shows error F02"></div>
+        <div class="field"><label for="s-msg">Describe the problem</label><textarea id="s-msg" name="message" required placeholder="What happened, when it started, any error codes, your address or installation reference"></textarea></div>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-primary" type="submit"><i class="ri-customer-service-2-line" aria-hidden="true"></i> Submit ticket</button>
+      </form>
+    </div>
+  </div>
+</section>

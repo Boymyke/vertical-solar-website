@@ -1,0 +1,29 @@
+<!--{
+  "title": "Checkout | Vertical Solar Shop",
+  "description": "Review your cart and place your order with Vertical Solar.",
+  "path": "/checkout", "page": "checkout", "noindex": true
+}-->
+<section class="page-hero"><div class="wrap"><h1>Checkout</h1><p class="lede">Review your order. We confirm stock, delivery and installation by phone before any payment is final.</p></div></section>
+<section class="section-tight">
+  <div class="wrap split" style="align-items:start;grid-template-columns:1.2fr 1fr">
+    <div class="card">
+      <h2 style="font-size:var(--fs-4)">Your details</h2>
+      <form class="form" data-checkout-form>
+        <div class="form-row"><div class="field"><label for="co-name">Full name</label><input id="co-name" name="name" required autocomplete="name"></div><div class="field"><label for="co-phone">Phone</label><input id="co-phone" name="phone" type="tel" required autocomplete="tel"></div></div>
+        <div class="field"><label for="co-email">Email</label><input id="co-email" name="email" type="email" autocomplete="email"><span class="hint">Needed for online payment and your receipt.</span></div>
+        <div class="field"><label for="co-addr">Delivery / installation address</label><input id="co-addr" name="address" required autocomplete="street-address"></div>
+        <div class="form-row"><div class="field"><label for="co-city">City</label><input id="co-city" name="city" required autocomplete="address-level2"></div><div class="field"><label for="co-state">State</label><input id="co-state" name="state" required autocomplete="address-level1"></div></div>
+        <div class="field"><label for="co-notes">Notes (optional)</label><textarea id="co-notes" name="notes" placeholder="Installation needed? Best time to call?"></textarea></div>
+        <fieldset style="border:0;padding:0;margin:0" data-pay-options><legend class="field" style="margin-bottom:8px"><strong>Payment</strong></legend>
+          <div class="choice-grid">
+            <label class="choice"><input type="radio" name="payment_method" value="transfer" checked><span><i class="ri-bank-line" aria-hidden="true"></i>Bank transfer<small>We confirm by phone, then send account details</small></span></label>
+            <label class="choice" data-paystack-option hidden><input type="radio" name="payment_method" value="paystack"><span><i class="ri-bank-card-line" aria-hidden="true"></i>Pay online<small>Card, transfer or USSD via Paystack</small></span></label>
+          </div></fieldset>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="form-status" role="status" hidden></div>
+        <button class="btn btn-primary" type="submit"><i class="ri-secure-payment-line" aria-hidden="true"></i> Place order</button>
+      </form>
+    </div>
+    <aside class="card" data-order-summary><h2 style="font-size:var(--fs-4)">Order summary</h2><div data-summary></div></aside>
+  </div>
+</section>

@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vertical-solar",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": true },
+
+  // Static website + admin app. The Worker runs first only for dynamic routes;
+  // everything else is served straight from the edge cache with headers from public/_headers.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/api/*",
+      "/media/*",
+      "/blog/*",
+      "/projects/*",
+      "/shop/*",
+      "/faq",
+      "/q/*",
+      "/sitemap.xml",
+      "/robots.txt",
+      "/admin",
+      "/admin/*",
+      "!/admin/assets/*"
+    ]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vertical-solar-db",
+      "database_id": "5c26be52-50f3-4e6d-8308-b71456f61c57",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    { "binding": "MEDIA", "bucket_name": "vertical-solar-media" }
+  ],
+
+  // Workers AI powers the website chatbot, voice transcription and the CRM sales assistant.
+  "ai": { "binding": "AI" },
+
+  // Background jobs: geofence/"lost contact" checks every 10 min, daily follow-up digest at 07:00 Lagos.
+  "triggers": { "crons": ["*/10 * * * *", "0 6 * * *"] },
+
+  "vars": {
+    "SITE_URL": "https://verticalsolar.com.ng",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
+    "STT_MODEL": "@cf/openai/whisper-large-v3-turbo"
+  }
+  // Optional secrets (set in Cloudflare dashboard → Worker → Settings → Variables & Secrets):
+  //   RESEND_API_KEY        – send emails from the CRM
+  //   PAYSTACK_SECRET_KEY   – verify online shop payments
+  //   TURNSTILE_SECRET      – spam protection on public forms
+}

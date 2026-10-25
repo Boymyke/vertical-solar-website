@@ -1,0 +1,85 @@
+<!--{
+  "title": "Solar Packages & Prices in Nigeria (1kVA–10kVA) + Load Calculator | Vertical Solar",
+  "description": "See installed prices for 1kVA, 2.5kVA, 4.2kVA, 5kVA, 7.5kVA and 10kVA solar systems with lead-acid or lithium batteries, and use our free load calculator to size your system.",
+  "path": "/packages", "page": "packages",
+  "crumbs": [["Home","/"],["Packages","/packages"]]
+}-->
+<section class="page-hero">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><i class="ri-arrow-right-s-line" aria-hidden="true"></i><span aria-current="page">Packages</span></nav>
+    <h1>Solar packages and prices</h1>
+    <p class="lede">Complete systems — panels, inverter, batteries, protection, mounting and installation — with starting prices. Not sure which one? The calculator below sizes it from your appliances.</p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="wrap">
+    <div class="pkg-tabs" role="tablist" aria-label="Package type">
+      <button role="tab" aria-selected="true" data-tier="all">All packages</button>
+      <button role="tab" aria-selected="false" data-tier="residential">Homes</button>
+      <button role="tab" aria-selected="false" data-tier="commercial">Business</button>
+    </div>
+    <div class="pkg-grid" data-pkg-list><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    <p class="muted" style="margin-top:20px;font-size:.9rem"><i class="ri-information-line" aria-hidden="true"></i> Prices are starting prices for installation in our branch cities and may change with exchange rates. Your written quote after a site survey is final.</p>
+  </div>
+</section>
+
+<section class="section section-alt" id="calculator" aria-labelledby="calc-title">
+  <div class="wrap">
+    <div class="section-head"><h2 id="calc-title">Size your system</h2><p>Add what you want to run during outages and for how many hours. We'll estimate the inverter, battery and panels you need, and what you could save.</p></div>
+    <div class="calc">
+      <div class="card">
+        <div class="form-row" style="margin-bottom:16px">
+          <div class="field"><label for="add-appl">Add an appliance</label>
+            <select id="add-appl" data-add-appliance><option value="">Choose…</option></select></div>
+          <div class="field"><label for="battery-type">Battery type</label><select id="battery-type" data-battery><option value="lithium">Lithium (LiFePO4)</option><option value="lead">Lead-acid / tubular</option></select></div>
+        </div>
+        <div class="appliance-list" data-appliances aria-live="polite"></div>
+        <details style="margin-top:20px"><summary style="cursor:pointer;font-weight:550">Running cost assumptions</summary>
+          <div class="form-row" style="margin-top:12px">
+            <div class="field"><label for="fuel-price">Petrol price per litre (₦)</label><input id="fuel-price" type="number" min="0" step="10" value="1100" data-fuel-price><span class="hint">Edit to today's pump price in your area.</span></div>
+            <div class="field"><label for="current-spend">Your current monthly fuel / power spend (₦)</label><input id="current-spend" type="number" min="0" step="1000" placeholder="Optional" data-current-spend></div>
+            <div class="field"><label for="backup-share">Share of energy needed at night</label><select id="backup-share" data-night><option value="0.4">40% (mostly daytime use)</option><option value="0.6" selected>60% (typical home)</option><option value="0.8">80% (mostly evenings)</option></select></div>
+          </div></details>
+      </div>
+      <aside class="calc-result" aria-live="polite">
+        <h3>Your estimate</h3>
+        <dl>
+          <dt>Connected load</dt><dd data-out="load">0 W</dd>
+          <dt>Energy per day</dt><dd data-out="daily">0 kWh</dd>
+          <dt>Inverter size</dt><dd data-out="inverter">—</dd>
+          <dt>Battery storage</dt><dd data-out="battery">—</dd>
+          <dt>Solar panels</dt><dd data-out="panels">—</dd>
+          <dt>Generator fuel cost / month</dt><dd data-out="gen">—</dd>
+        </dl>
+        <div class="meter" aria-hidden="true"><span data-meter></span></div>
+        <div class="reco" data-reco><span style="font-size:.85rem;opacity:.8">Recommended</span><strong data-out="pkg">Add appliances to see a recommendation</strong><span data-out="pkgnote" style="font-size:.85rem"></span></div>
+        <div class="btn-row" style="margin-top:18px"><button class="btn btn-accent" type="button" data-send-calc><i class="ri-send-plane-line" aria-hidden="true"></i> Send to an engineer</button></div>
+        <p style="font-size:.78rem;opacity:.75;margin:12px 0 0">Estimates assume ~4.5 peak sun hours and 550W panels. A site survey confirms the design.</p>
+      </aside>
+    </div>
+    <div class="card" data-calc-form hidden style="margin-top:24px;max-width:760px">
+      <h3>Get a quote for this estimate</h3>
+      <form class="form" data-form="lead" data-success="replace" data-success-title="Estimate sent to our engineers">
+        <div class="form-row"><div class="field"><label for="c-name">Full name</label><input id="c-name" name="name" required autocomplete="name"></div><div class="field"><label for="c-phone">Phone / WhatsApp</label><input id="c-phone" name="phone" type="tel" required autocomplete="tel"></div></div>
+        <div class="form-row"><div class="field"><label for="c-city">City / area</label><input id="c-city" name="city"></div><div class="field"><label for="c-email">Email (optional)</label><input id="c-email" name="email" type="email"></div></div>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-primary" type="submit">Request my quote</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap-narrow">
+    <h2>What's included in every package</h2>
+    <ul class="check-list">
+      <li>Solar panels, hybrid inverter and batteries as specified</li>
+      <li>Mounting structure, DC and AC cabling, breakers, isolators and surge protection</li>
+      <li>Delivery, installation, testing and commissioning in our branch cities</li>
+      <li>Handover training for your household or staff</li>
+      <li>Manufacturer warranties plus our workmanship warranty</li>
+    </ul>
+    <p>Need something bigger or different? <a href="/get-quote">Request a custom design</a> or <a href="#" data-open-chat>ask Sola</a>.</p>
+  </div>
+</section>

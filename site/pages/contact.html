@@ -1,0 +1,47 @@
+<!--{
+  "title": "Contact Vertical Solar — Lagos, Abuja, Port Harcourt, Kano & Benin Branches",
+  "description": "Call, WhatsApp or visit Vertical Solar. Head office at 5 Agbonyin Street, Surulere, Lagos, with branches in Abuja, Port Harcourt, Kano and Benin City. Mon–Fri 8am–6pm, Sat 9am–3pm.",
+  "path": "/contact", "page": "contact", "local": true,
+  "css": ["/assets/vendor/leaflet/leaflet.css"], "scripts": ["/assets/vendor/leaflet/leaflet.js"],
+  "crumbs": [["Home","/"],["Contact","/contact"]],
+  "ld": [{"@type":"ContactPage","name":"Contact Vertical Solar"}]
+}-->
+<section class="page-hero">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><i class="ri-arrow-right-s-line" aria-hidden="true"></i><span aria-current="page">Contact</span></nav>
+    <h1>Talk to us</h1>
+    <p class="lede">Questions, quotes or a fault to report — reach the right team quickly. We reply to messages within one working day.</p>
+  </div>
+</section>
+<section class="section-tight">
+  <div class="wrap split" style="align-items:start">
+    <div>
+      <div class="contact-methods">
+        <a class="contact-method" data-phone href="tel:08186311330"><span class="feature-icon"><i class="ri-phone-line" aria-hidden="true"></i></span><span><strong>Call sales</strong><span class="muted" data-phone="text">08186311330</span></span></a>
+        <a class="contact-method" data-whatsapp href="#"><span class="feature-icon"><i class="ri-whatsapp-line" aria-hidden="true"></i></span><span><strong>WhatsApp</strong><span class="muted">Chat with customer service</span></span></a>
+        <a class="contact-method" data-email href="mailto:Verticalenergy.ng@gmail.com"><span class="feature-icon"><i class="ri-mail-line" aria-hidden="true"></i></span><span><strong>Email</strong><span class="muted" data-email="text">Verticalenergy.ng@gmail.com</span></span></a>
+        <a class="contact-method" href="/support"><span class="feature-icon"><i class="ri-tools-line" aria-hidden="true"></i></span><span><strong>Report a fault</strong><span class="muted">Open a support ticket</span></span></a>
+      </div>
+      <p class="muted" style="margin-top:20px"><i class="ri-time-line" aria-hidden="true"></i> <span data-hours>Mon–Fri 8:00am–6:00pm · Sat 9:00am–3:00pm</span></p>
+    </div>
+    <div class="card">
+      <h2 style="font-size:var(--fs-4)">Send a message</h2>
+      <form class="form" data-form="lead" data-extra='{"kind":"contact"}' data-success="replace" data-success-title="Message received">
+        <div class="form-row"><div class="field"><label for="ct-name">Full name</label><input id="ct-name" name="name" required autocomplete="name"></div><div class="field"><label for="ct-phone">Phone / WhatsApp</label><input id="ct-phone" name="phone" type="tel" autocomplete="tel"></div></div>
+        <div class="field"><label for="ct-email">Email</label><input id="ct-email" name="email" type="email" autocomplete="email"></div>
+        <div class="field"><label for="ct-int">I'm interested in</label><select id="ct-int" name="interest"><option>Home solar</option><option>Business / commercial solar</option><option>Industrial / large project</option><option>Financing</option><option>Maintenance or repair</option><option>Partnership</option><option>Something else</option></select></div>
+        <div class="field"><label for="ct-msg">Message</label><textarea id="ct-msg" name="message" required></textarea></div>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-primary" type="submit"><i class="ri-send-plane-line" aria-hidden="true"></i> Send message</button>
+        <p class="muted" style="font-size:.8rem;margin:0">Give us a phone number or email so we can reply. See our <a href="/privacy">privacy policy</a>.</p>
+      </form>
+    </div>
+  </div>
+</section>
+<section class="section" aria-labelledby="branches-title">
+  <div class="wrap">
+    <div class="section-head"><h2 id="branches-title">Our branches</h2></div>
+    <div class="map" data-map role="region" aria-label="Map of Vertical Solar branches"></div>
+    <div class="grid-3" style="margin-top:24px" data-branches></div>
+  </div>
+</section>
