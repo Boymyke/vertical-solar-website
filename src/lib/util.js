@@ -26,7 +26,7 @@ export function escapeHtml(s = '') {
 }
 
 // Conservative HTML sanitizer for admin-authored rich text (blog posts, project write-ups).
-const ALLOWED_TAGS = new Set(['p','br','strong','b','em','i','u','s','a','ul','ol','li','h2','h3','h4','blockquote','img','figure','figcaption','table','thead','tbody','tr','th','td','hr','code','pre','span','div','iframe','video','source','mark','small','sup','sub']);
+const ALLOWED_TAGS = new Set(['p','br','strong','b','em','i','u','s','a','ul','ol','li','h2','h3','h4','blockquote','img','figure','figcaption','table','thead','tbody','tr','th','td','hr','code','pre','span','div','iframe','video','source','mark','small','sup','sub','kbd']);
 const ALLOWED_IFRAME = /^https:\/\/(www\.youtube-nocookie\.com|www\.youtube\.com|player\.vimeo\.com)\//;
 export function sanitizeHtml(html = '') {
   let out = String(html);

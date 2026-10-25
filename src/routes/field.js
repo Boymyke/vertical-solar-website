@@ -2,6 +2,7 @@
 import { json, ok, fail, readJson } from '../lib/http.js';
 import { requirePerm, can, notify, rateLimit } from '../lib/auth.js';
 import { str, num, now, haversine, clamp, parseJSON } from '../lib/util.js';
+import { markArrival, utcToLagosHm } from './staff.js';
 
 const GPS_SLACK_MAX = 100; // metres of GPS inaccuracy we tolerate on top of the site radius
 
@@ -25,15 +26,19 @@ export function registerField(r) {
   r.get('/api/field/me', async (req, env, _p, ctx) => {
     requirePerm(ctx.user, 'field');
     const uid = ctx.user.id;
-    const [jobs, open, history, reports] = await Promise.all([
+    const [jobs, open, history, reports, shifts, issues] = await Promise.all([
       env.DB.prepare(`SELECT i.id, i.title, i.address, i.lat, i.lng, i.radius_m, i.status, i.progress, i.start_date, i.end_date, i.notes, c.name customer_name, c.phone customer_phone
         FROM installation_staff s JOIN installations i ON i.id=s.installation_id LEFT JOIN customers c ON c.id=i.customer_id
         WHERE s.user_id=? AND i.status IN ('scheduled','in_progress','on_hold') ORDER BY i.start_date`).bind(uid).all(),
       env.DB.prepare(`SELECT a.*, i.title site, i.lat site_lat, i.lng site_lng, i.radius_m FROM attendance a LEFT JOIN installations i ON i.id=a.installation_id WHERE a.user_id=? AND a.status='open' ORDER BY a.id DESC LIMIT 1`).bind(uid).first(),
       env.DB.prepare(`SELECT a.id, a.clock_in_at, a.clock_out_at, a.status, a.offsite_minutes, i.title site FROM attendance a LEFT JOIN installations i ON i.id=a.installation_id WHERE a.user_id=? ORDER BY a.id DESC LIMIT 20`).bind(uid).all(),
       env.DB.prepare(`SELECT w.id, w.message, w.images, w.progress, w.created_at, w.review_note, w.reviewed_at, i.title site FROM work_reports w LEFT JOIN installations i ON i.id=w.installation_id WHERE w.user_id=? ORDER BY w.id DESC LIMIT 20`).bind(uid).all(),
+      env.DB.prepare(`SELECT s.id, s.installation_id, s.starts_at, s.ends_at, s.status, s.note, s.late_minutes, i.title site, i.address FROM shifts s JOIN installations i ON i.id=s.installation_id
+        WHERE s.user_id=? AND s.status != 'cancelled' AND s.starts_at >= datetime('now','-12 hours') AND s.starts_at <= datetime('now','+14 days') ORDER BY s.starts_at LIMIT 20`).bind(uid).all(),
+      env.DB.prepare(`SELECT s.id, s.category, s.urgency, s.message, s.status, s.response, s.created_at, i.title site FROM site_issues s LEFT JOIN installations i ON i.id=s.installation_id WHERE s.user_id=? ORDER BY s.id DESC LIMIT 10`).bind(uid).all(),
     ]);
-    return json({ jobs: jobs.results, open, history: history.results, reports: reports.results.map((x) => ({ ...x, images: parseJSON(x.images, []) })) });
+    return json({ jobs: jobs.results, open, history: history.results, reports: reports.results.map((x) => ({ ...x, images: parseJSON(x.images, []) })),
+      shifts: shifts.results.map((x) => ({ ...x, start_local: utcToLagosHm(x.starts_at), end_local: x.ends_at ? utcToLagosHm(x.ends_at) : null })), issues: issues.results });
   });
 
   r.post('/api/field/clock-in', async (req, env, _p, ctx) => {
@@ -55,8 +60,10 @@ export function registerField(r) {
       VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id`).bind(ctx.user.id, site.id, now(), lat, lng, accuracy, distance, now(), lat, lng, distance).first();
     await env.DB.prepare('INSERT INTO location_pings (attendance_id, lat, lng, accuracy, distance, inside) VALUES (?,?,?,?,?,1)').bind(row.id, lat, lng, accuracy, distance).run();
     if (site.status === 'scheduled') await env.DB.prepare(`UPDATE installations SET status='in_progress', updated_at=? WHERE id=?`).bind(now(), site.id).run();
-    await notify(env, { module: 'attendance', type: 'success', title: `${ctx.user.name} clocked in`, body: `${site.title} · ${distance}m from site centre`, link: '/admin/#/attendance' });
-    return ok({ id: row.id, distance });
+    const arrival = await markArrival(env, ctx.user.id, site.id, row.id);
+    const lateTxt = arrival && arrival.late > 10 ? ` · ${arrival.late} min late` : arrival ? ' · on time' : '';
+    await notify(env, { module: 'attendance', type: arrival && arrival.late > 10 ? 'warning' : 'success', title: `${ctx.user.name} clocked in`, body: `${site.title} · ${distance}m from site centre${lateTxt}`, link: '/admin/#/attendance' });
+    return ok({ id: row.id, distance, late: arrival?.late ?? null });
   });
 
   r.post('/api/field/ping', async (req, env, _p, ctx) => {

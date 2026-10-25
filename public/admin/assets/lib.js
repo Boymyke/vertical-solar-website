@@ -98,14 +98,58 @@ export function fieldHtml(f, value) {
         <div class="row"><button type="button" class="btn btn-sm" data-upload-many="${f.name}" data-folder="${f.folder || 'website'}"><i class="ri-upload-2-line"></i> Add photos</button><button type="button" class="btn btn-sm btn-ghost" data-addurl="${f.name}">Add by URL</button></div></div>`);
     }
     case 'icon': return wrap(`<div class="row"><span class="card-icon" data-icon-preview style="font-size:20px"><i class="${esc(v || 'ri-question-line')}"></i></span><input class="input grow" id="${id}" name="${f.name}" value="${esc(v)}" readonly ${req} style="max-width:220px"><button type="button" class="btn btn-sm" data-pick-icon="${f.name}"><i class="ri-apps-line"></i> Choose icon</button></div>`);
+    case 'section': return `<div class="form-section"><h3>${esc(f.label)}</h3>${f.hint ? `<p>${esc(f.hint)}</p>` : ''}</div>`;
+    case 'place': {
+      const lat = f.values?.[f.latName || 'lat'], lng = f.values?.[f.lngName || 'lng'];
+      return wrap(`<div class="place-field"><input class="input" id="${id}" name="${f.name}" value="${esc(v)}" ${req} placeholder="${esc(f.placeholder || 'Start typing an area or street, then pick from the list')}" data-place-input data-lat="${f.latName || 'lat'}" data-lng="${f.lngName || 'lng'}" ${lat != null && lat !== '' ? 'data-place-verified="1"' : ''}></div>
+        <input type="hidden" name="${f.latName || 'lat'}" value="${esc(lat ?? '')}"><input type="hidden" name="${f.lngName || 'lng'}" value="${esc(lng ?? '')}">
+        ${f.map ? `<div class="place-map" data-place-map ${lat != null && lat !== '' ? '' : 'hidden'}></div><span class="hint" data-place-maphint ${lat != null && lat !== '' ? '' : 'hidden'}>Drag the pin to the exact spot if needed.</span>` : ''}`);
+    }
+    case 'richtext': return wrap(`<div data-rte-wrap><div class="rte-toolbar" role="toolbar" aria-label="Formatting">
+        <button type="button" data-cmd="bold" title="Bold"><i class="ri-bold"></i></button><button type="button" data-cmd="italic" title="Italic"><i class="ri-italic"></i></button>
+        <span class="sep"></span><button type="button" data-cmd="insertUnorderedList" title="Bullet list"><i class="ri-list-unordered"></i></button><button type="button" data-cmd="insertOrderedList" title="Numbered list"><i class="ri-list-ordered"></i></button>
+        ${f.headings ? '<button type="button" data-cmd="formatBlock" data-val="h2" title="Heading"><i class="ri-heading"></i></button><button type="button" data-cmd="formatBlock" data-val="p" title="Normal text"><i class="ri-paragraph"></i></button>' : ''}
+        <span class="sep"></span><button type="button" data-cmd="createLink" title="Add a link"><i class="ri-link"></i></button><button type="button" data-cmd="removeFormat" title="Clear formatting"><i class="ri-format-clear"></i></button></div>
+        <div class="rte ${f.tall ? 'tall' : ''}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${id}-l" data-rte="${f.name}" data-placeholder="${esc(f.placeholder || 'Write here…')}">${v || ''}</div></div>`).replace(`<label for="${id}">`, `<label id="${id}-l">`);
+    case 'specs': {
+      const obj = v && typeof v === 'object' ? v : (() => { try { return JSON.parse(v || '{}'); } catch { return {}; } })();
+      const rows = Object.entries(obj).length ? Object.entries(obj) : [['', '']];
+      return wrap(`<div class="kv-editor" data-specs="${f.name}">${rows.map(([k, val]) => specRow(k, val)).join('')}</div>
+        <datalist id="spec-names">${SPEC_NAMES.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+        <div><button type="button" class="btn btn-sm" data-add-spec="${f.name}"><i class="ri-add-line"></i> Add a detail</button></div>`);
+    }
+    case 'link': {
+      const known = SITE_LINKS.some(([u]) => u === v);
+      return wrap(`<select class="input" id="${id}" data-link-select="${f.name}">
+        <option value="">— No button —</option>
+        ${LINK_GROUPS.map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([u, l]) => `<option value="${esc(u)}" ${u === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}
+        <option value="__custom" ${v && !known ? 'selected' : ''}>Another web address…</option></select>
+        <input class="input" name="${f.name}" value="${esc(v)}" data-link-custom placeholder="https://… or /page" style="margin-top:6px" ${v && !known ? '' : 'hidden'}>`);
+    }
+    case 'pages': {
+      const list = String(v || '*').split(',').map((x) => x.trim()).filter(Boolean);
+      const all = !list.length || list.includes('*');
+      return wrap(`<div class="stack" style="gap:8px" data-pages="${f.name}"><div class="choice-pills"><label><input type="radio" name="${f.name}__mode" value="all" ${all ? 'checked' : ''}><span>Every page</span></label><label><input type="radio" name="${f.name}__mode" value="some" ${all ? '' : 'checked'}><span>Only some pages</span></label></div>
+        <div class="page-checks" ${all ? 'hidden' : ''}>${SITE_LINKS.filter(([u]) => u.startsWith('/') && !u.includes('#')).map(([u, l]) => `<label class="check"><input type="checkbox" value="${esc(u)}" ${list.includes(u) ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}
+        <label class="check"><input type="checkbox" value="/blog/*" ${list.includes('/blog/*') ? 'checked' : ''}><span>Every blog article</span></label><label class="check"><input type="checkbox" value="/shop/*" ${list.includes('/shop/*') ? 'checked' : ''}><span>Every shop product</span></label></div></div>`);
+    }
     case 'json': return wrap(`<textarea class="input" id="${id}" name="${f.name}" rows="${f.rows || 4}" data-json-text style="font-family:ui-monospace,monospace;font-size:12px">${esc(typeof v === 'string' ? v : JSON.stringify(v || (f.empty ?? {}), null, 2))}</textarea>`);
     case 'list': return wrap(`<input class="input" id="${id}" name="${f.name}" value="${esc(Array.isArray(v) ? v.join(', ') : v)}" data-list placeholder="${esc(f.placeholder || 'Comma separated')}">`);
     default: return wrap(`<input class="input" type="${f.type || 'text'}" id="${id}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min != null ? `min="${f.min}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.readonly ? 'readonly' : ''}>`);
   }
 }
 export function formHtml(fields, values = {}) {
-  return `<div class="form-grid">${fields.map((f) => fieldHtml(f, values[f.name])).join('')}</div>`;
+  return `<div class="form-grid">${fields.map((f) => fieldHtml(f.type === 'place' ? { ...f, values } : f, values[f.name])).join('')}</div>`;
 }
+const SPEC_NAMES = ['Capacity', 'Power', 'Voltage', 'Current', 'Battery type', 'Cycle life', 'Efficiency', 'Panel type', 'Phase', 'Warranty', 'Brand', 'Model', 'Dimensions', 'Weight', 'Display', 'Communication', 'Certifications'];
+const specRow = (k = '', v = '') => `<div class="kv-row"><input class="input" placeholder="Detail, e.g. Capacity" value="${esc(k)}" list="spec-names" data-k aria-label="Detail name"><input class="input v" placeholder="Value, e.g. 5 kWh" value="${esc(v)}" data-v aria-label="Detail value"><button type="button" class="icon-btn" data-rm-spec aria-label="Remove this detail"><i class="ri-delete-bin-line"></i></button></div>`;
+// Pages a popup button (or any link) can point to.
+export const SITE_LINKS = [
+  ['/', 'Home page'], ['/get-quote', 'Get a free quote'], ['/packages', 'Packages & prices'], ['/packages#calculator', 'Load calculator'], ['/financing', 'Pay monthly (financing)'],
+  ['/shop', 'Shop'], ['/projects', 'Projects'], ['/solutions/residential', 'Home solar'], ['/solutions/commercial', 'Business solar'], ['/solutions/industrial', 'Industrial solar'],
+  ['/about', 'About us'], ['/contact', 'Contact & branches'], ['/support', 'Report a fault'], ['/solar-care', 'Solar care guide'], ['/blog', 'Blog'], ['/testimonials', 'Customer reviews'], ['/faq', 'Questions (FAQ)'],
+];
+const LINK_GROUPS = [['Website pages', SITE_LINKS], ['Contact', [['#chat', 'Open the chat assistant'], ['tel:08186311330', 'Call the office'], ['https://wa.me/2348186311330', 'WhatsApp the office']]]];
 export function readForm(root, fields) {
   const out = {};
   for (const f of fields) {
@@ -119,6 +163,24 @@ export function readForm(root, fields) {
     else if (f.type === 'list') out[f.name] = el.value.split(',').map((s) => s.trim()).filter(Boolean);
     else out[f.name] = el.value;
   }
+  for (const f of fields) {
+    if (f.type === 'place') {
+      const la = root.querySelector(`[name="${f.latName || 'lat'}"]`).value, ln = root.querySelector(`[name="${f.lngName || 'lng'}"]`).value;
+      out[f.latName || 'lat'] = la === '' ? null : Number(la); out[f.lngName || 'lng'] = ln === '' ? null : Number(ln);
+    }
+    if (f.type === 'richtext') { const ed = root.querySelector(`[data-rte="${f.name}"]`); const h = ed.innerHTML.trim(); out[f.name] = ed.textContent.trim() || /<img/i.test(h) ? h : ''; }
+    if (f.type === 'specs') {
+      const o = {};
+      root.querySelectorAll(`[data-specs="${f.name}"] .kv-row`).forEach((r) => { const k = r.querySelector('[data-k]').value.trim(), v = r.querySelector('[data-v]').value.trim(); if (k && v) o[k] = v; });
+      out[f.name] = o;
+    }
+    if (f.type === 'pages') {
+      const box = root.querySelector(`[data-pages="${f.name}"]`);
+      const mode = box.querySelector(`[name="${f.name}__mode"]:checked`)?.value;
+      const picked = [...box.querySelectorAll('.page-checks input:checked')].map((c) => c.value);
+      out[f.name] = mode === 'some' && picked.length ? picked.join(',') : '*';
+    }
+  }
   return out;
 }
 export function validate(root) {
@@ -127,8 +189,55 @@ export function validate(root) {
   return true;
 }
 
-// Wire up upload / image / icon widgets inside a container.
+// Wire up upload / image / icon / location / editor widgets inside a container.
 export function bindWidgets(root) {
+  // Location search with a confirm-the-pin map.
+  root.querySelectorAll('[data-place-input]').forEach(async (input) => {
+    const { attachPlace } = await import('/assets/js/places.js');
+    const wrap = input.closest('.field');
+    const lat = root.querySelector(`[name="${input.dataset.lat}"]`), lng = root.querySelector(`[name="${input.dataset.lng}"]`);
+    const mapEl = wrap.querySelector('[data-place-map]'), hint = wrap.querySelector('[data-place-maphint]');
+    let map, marker;
+    const show = async (la, ln) => {
+      if (!mapEl) return;
+      mapEl.hidden = false; if (hint) hint.hidden = false;
+      const L = await leaflet();
+      if (!map) {
+        map = L.map(mapEl, { scrollWheelZoom: false }).setView([la, ln], 16);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+        marker = L.marker([la, ln], { draggable: true }).addTo(map);
+        marker.on('dragend', () => { const p = marker.getLatLng(); lat.value = p.lat.toFixed(6); lng.value = p.lng.toFixed(6); });
+      } else { marker.setLatLng([la, ln]); map.setView([la, ln], 16); }
+      setTimeout(() => map.invalidateSize(), 60);
+    };
+    attachPlace(input, {
+      onPick: (p) => { lat.value = p.lat; lng.value = p.lng; show(p.lat, p.lng); },
+      onClear: () => { lat.value = ''; lng.value = ''; },
+    });
+    if (lat.value && lng.value) show(Number(lat.value), Number(lng.value));
+  });
+  // Simple rich-text editors.
+  root.querySelectorAll('[data-rte-wrap]').forEach((w) => {
+    const ed = w.querySelector('[data-rte]');
+    w.querySelector('.rte-toolbar').addEventListener('mousedown', (e) => e.preventDefault());
+    w.querySelector('.rte-toolbar').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cmd]'); if (!b) return;
+      ed.focus();
+      if (b.dataset.cmd === 'createLink') { const u = prompt('Link to (https://… or /page):'); if (u && /^(https?:\/\/|\/|mailto:|tel:)/.test(u)) document.execCommand('createLink', false, u); return; }
+      document.execCommand(b.dataset.cmd, false, b.dataset.val ? `<${b.dataset.val}>` : null);
+    });
+    ed.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+  });
+  // Key / value details.
+  root.querySelectorAll('[data-add-spec]').forEach((b) => b.addEventListener('click', () => { const box = root.querySelector(`[data-specs="${b.dataset.addSpec}"]`); box.insertAdjacentHTML('beforeend', specRow()); box.lastElementChild.querySelector('input').focus(); }));
+  root.addEventListener('click', (e) => { const rm = e.target.closest('[data-rm-spec]'); if (rm) { const box = rm.closest('[data-specs]'); rm.closest('.kv-row').remove(); if (!box.children.length) box.insertAdjacentHTML('beforeend', specRow()); } });
+  // Link pickers.
+  root.querySelectorAll('[data-link-select]').forEach((sel) => {
+    const input = sel.parentElement.querySelector('[data-link-custom]');
+    sel.addEventListener('change', () => { if (sel.value === '__custom') { input.hidden = false; input.value = ''; input.focus(); } else { input.hidden = true; input.value = sel.value; } input.dispatchEvent(new Event('input', { bubbles: true })); });
+  });
+  // Page pickers.
+  root.querySelectorAll('[data-pages]').forEach((box) => box.addEventListener('change', (e) => { if (e.target.name?.endsWith('__mode')) box.querySelector('.page-checks').hidden = e.target.value !== 'some'; }));
   root.addEventListener('click', async (e) => {
     const up = e.target.closest('[data-upload]');
     if (up) {
@@ -211,11 +320,21 @@ export function iconPicker(current) {
 }
 
 // ── Data table ──
-export function table({ columns, rows, onRow, empty = 'Nothing here yet.' }) {
-  if (!rows.length) return `<div class="empty"><i class="ri-inbox-2-line"></i>${esc(empty)}</div>`;
+export function table({ columns, rows, onRow, empty = 'Nothing here yet.', emptyIcon = 'ri-inbox-2-line', emptyAction = '' }) {
+  if (!rows.length) return emptyState(emptyIcon, empty, emptyAction);
   return `<div class="table-wrap"><table class="t"><thead><tr>${columns.map((c) => `<th${c.align ? ` style="text-align:${c.align}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
-    ${rows.map((r, i) => `<tr class="${onRow ? 'click' : ''}" data-row="${i}">${columns.map((c) => `<td${c.align ? ` style="text-align:${c.align}"` : ''}>${c.render ? c.render(r) : esc(r[c.key] ?? '—')}</td>`).join('')}</tr>`).join('')}
+    ${rows.map((r, i) => `<tr class="${onRow ? 'click' : ''}" data-row="${i}">${columns.map((c, j) => `<td data-label="${esc(c.label)}"${j === 0 ? ' class="lead"' : ''}${c.align ? ` style="text-align:${c.align}"` : ''}>${c.render ? c.render(r) : esc(r[c.key] ?? '—')}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div>`;
+}
+// Friendly empty state: what is missing and what to do about it.
+export function emptyState(icon, text, action = '') {
+  const [title, ...rest] = String(text).split('\n');
+  return `<div class="empty"><i class="${icon}"></i><strong>${esc(title)}</strong>${rest.length ? `<span>${esc(rest.join(' '))}</span>` : ''}${action}</div>`;
+}
+// Placeholder blocks shown while a screen loads.
+export function skeleton(kind = 'page') {
+  if (kind === 'list') return `<div class="card-b">${[90, 70, 80, 60].map((w) => `<div class="skel skel-line" style="width:${w}%"></div>`).join('')}</div>`;
+  return `<div class="skel-wrap"><div class="grid g-4">${'<div class="skel skel-card"></div>'.repeat(4)}</div><div class="grid g-21"><div class="skel" style="height:300px;border-radius:20px"></div><div class="skel" style="height:300px;border-radius:20px"></div></div></div>`;
 }
 
 export const statusPill = (s) => {
@@ -227,12 +346,13 @@ export const statusPill = (s) => {
 export const STAGES = ['new', 'contacted', 'site_survey', 'quoted', 'negotiation', 'won', 'lost'];
 export const SEGMENTS = [['residential', 'Residential'], ['commercial', 'Commercial'], ['industrial', 'Industrial'], ['government', 'Government']];
 
+const scripts = {};
 export function loadScript(src) {
-  return new Promise((res, rej) => { if ([...document.scripts].some((s) => s.src.endsWith(src))) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  return (scripts[src] ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { delete scripts[src]; rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }));
 }
 export function loadCss(href) { if (![...document.styleSheets].some((s) => s.href?.endsWith(href))) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l); } }
 export async function leaflet() { loadCss('/assets/vendor/leaflet/leaflet.css'); await loadScript('/assets/vendor/leaflet/leaflet.js'); window.L.Icon.Default.imagePath = '/assets/vendor/leaflet/images/'; return window.L; }
-export async function chartjs() { await loadScript('/assets/vendor/chart.umd.min.js'); const C = window.Chart; C.defaults.font.family = 'Inter, system-ui, sans-serif'; C.defaults.color = getComputedStyle(document.body).getPropertyValue('--muted').trim(); return C; }
+export async function chartjs() { await loadScript('/assets/vendor/chart.umd.min.js'); const C = window.Chart; C.defaults.font.family = "'Inter Tight', system-ui, sans-serif"; C.defaults.color = getComputedStyle(document.body).getPropertyValue('--muted').trim(); return C; }
 export function baseMap(L, el, center = [8.5, 6.5], zoom = 6) {
   const m = L.map(el).setView(center, zoom);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(m);

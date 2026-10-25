@@ -2,8 +2,11 @@
 import { notify } from './lib/auth.js';
 import { getSettings } from './lib/site.js';
 import { now } from './lib/util.js';
+import { shiftReminders } from './routes/staff.js';
 
 export async function everyTenMinutes(env) {
+  // Site schedules: "starting soon", "running late" and "not arrived" alerts.
+  try { await shiftReminders(env); } catch (e) { console.error('shift reminders', e); }
   // Staff whose phone stopped reporting location while clocked in.
   const { results: silent } = await env.DB.prepare(`SELECT a.id, u.name, i.title FROM attendance a JOIN users u ON u.id=a.user_id LEFT JOIN installations i ON i.id=a.installation_id
     WHERE a.status='open' AND a.lost_contact_alerted=0 AND a.last_ping_at < datetime('now','-25 minutes')`).all();
@@ -43,7 +46,7 @@ export async function daily(env) {
   const f = await env.DB.prepare(`SELECT COUNT(*) n, SUM(CASE WHEN due_at < date('now') THEN 1 ELSE 0 END) overdue FROM followups WHERE status='pending' AND due_at < date('now','+1 day')`).first();
   if (f.n) await notify(env, { module: 'followups', type: f.overdue ? 'warning' : 'info', title: `${f.n} follow-up${f.n > 1 ? 's' : ''} due today`, body: f.overdue ? `${f.overdue} overdue` : 'Open the follow-up board to start calling.', link: '/admin/#/followups' });
   // 5. Low stock digest.
-  const ls = await env.DB.prepare('SELECT COUNT(*) n FROM products WHERE active=1 AND stock <= reorder_level').first();
+  const ls = await env.DB.prepare('SELECT COUNT(*) n FROM products WHERE active=1 AND reorder_level > 0 AND stock <= reorder_level').first();
   if (ls.n) await notify(env, { module: 'inventory', type: 'warning', title: `${ls.n} product${ls.n > 1 ? 's are' : ' is'} low on stock`, link: '/admin/#/inventory' });
   // 6. Housekeeping.
   const nowS = Math.floor(Date.now() / 1000);

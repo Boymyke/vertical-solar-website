@@ -45,13 +45,13 @@ export function registerAdmin(r) {
       q(`SELECT COUNT(*) c FROM installations WHERE status IN ('scheduled','in_progress')`),
       q(`SELECT COUNT(*) c FROM attendance WHERE status='open'`),
       q(`SELECT COUNT(*) c FROM tickets WHERE status IN ('open','pending')`),
-      q(`SELECT COUNT(*) c FROM products WHERE active=1 AND stock <= reorder_level`),
+      q(`SELECT COUNT(*) c FROM products WHERE active=1 AND reorder_level > 0 AND stock <= reorder_level`),
       q(`SELECT COUNT(*) c FROM followups WHERE status='pending' AND due_at <= datetime('now','+1 day')`),
       q(`SELECT COUNT(DISTINCT visitor_id) c FROM pageviews WHERE created_at >= datetime('now','-30 days')`),
       q(`SELECT COUNT(DISTINCT visitor_id) c FROM pageviews WHERE created_at >= datetime('now','-60 days') AND created_at < datetime('now','-30 days')`),
       q(`SELECT COUNT(*) c FROM chats WHERE created_at >= datetime('now','-30 days')`),
     ]);
-    const [leadSeries, visitSeries, funnel, pipeline, recentLeads, upcoming, jobs, sources] = await Promise.all([
+    const [leadSeries, visitSeries, funnel, pipeline, recentLeads, upcoming, jobs, sources, ticketList, lowList, issues, todayShifts] = await Promise.all([
       all(`SELECT date(created_at) d, COUNT(*) n FROM customers WHERE created_at >= datetime('now','-30 days') GROUP BY d ORDER BY d`),
       all(`SELECT date(created_at) d, COUNT(DISTINCT visitor_id) n FROM pageviews WHERE created_at >= datetime('now','-30 days') GROUP BY d ORDER BY d`),
       all(`SELECT stage, COUNT(*) n, COALESCE(SUM(value_estimate),0) v FROM customers WHERE status!='inactive' GROUP BY stage`),
@@ -60,6 +60,11 @@ export function registerAdmin(r) {
       all(`SELECT f.id, f.title, f.type, f.due_at, c.name customer, c.id customer_id, c.phone FROM followups f LEFT JOIN customers c ON c.id=f.customer_id WHERE f.status='pending' ORDER BY f.due_at LIMIT 8`),
       all(`SELECT i.id, i.title, i.status, i.progress, i.start_date, c.name customer FROM installations i LEFT JOIN customers c ON c.id=i.customer_id WHERE i.status IN ('scheduled','in_progress') ORDER BY i.start_date LIMIT 6`),
       all(`SELECT COALESCE(source,'manual') source, COUNT(*) n FROM customers WHERE created_at >= datetime('now','-90 days') GROUP BY source ORDER BY n DESC LIMIT 8`),
+      all(`SELECT id, number, subject, priority, status, created_at FROM tickets WHERE status IN ('open','pending') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, id DESC LIMIT 3`),
+      all(`SELECT id, name, stock, reorder_level, unit FROM products WHERE active=1 AND reorder_level > 0 AND stock <= reorder_level ORDER BY stock - reorder_level, name LIMIT 3`),
+      all(`SELECT s.id, s.urgency, s.category, s.message, s.created_at, u.name user_name, i.title site FROM site_issues s JOIN users u ON u.id=s.user_id LEFT JOIN installations i ON i.id=s.installation_id WHERE s.status != 'resolved' ORDER BY CASE s.urgency WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, s.id DESC LIMIT 4`),
+      all(`SELECT s.id, s.status, s.starts_at, s.late_minutes, u.name user_name, i.title site FROM shifts s JOIN users u ON u.id=s.user_id JOIN installations i ON i.id=s.installation_id
+        WHERE s.status != 'cancelled' AND s.starts_at >= datetime('now','start of day','-1 hours') AND s.starts_at < datetime('now','start of day','+23 hours') ORDER BY s.starts_at LIMIT 8`),
     ]);
     const pct = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : a ? 100 : 0);
     return json({
@@ -75,7 +80,8 @@ export function registerAdmin(r) {
         visitors: { value: visitors30.c, change: pct(visitors30.c, visitorsPrev.c) },
         chats: { value: chats30.c },
       },
-      leadSeries, visitSeries, funnel, pipeline, recentLeads, upcoming, jobs, sources,
+      leadSeries, visitSeries, funnel, pipeline, recentLeads, upcoming, jobs, sources, ticketList, lowList, issues, todayShifts,
+      open_issues: (await q(`SELECT COUNT(*) c FROM site_issues WHERE status != 'resolved'`)).c,
     });
   });
 
@@ -84,6 +90,7 @@ export function registerAdmin(r) {
     const out = {};
     if (can(ctx.user, 'followups') || can(ctx.user, 'crm')) out.followups = (await env.DB.prepare(`SELECT COUNT(*) c FROM followups WHERE status='pending' AND due_at <= datetime('now','+1 day')`).first()).c;
     if (can(ctx.user, 'support')) out.tickets = (await env.DB.prepare(`SELECT COUNT(*) c FROM tickets WHERE status IN ('open','pending')`).first()).c;
+    if (can(ctx.user, 'installations') || can(ctx.user, 'attendance')) out.issues = (await env.DB.prepare(`SELECT COUNT(*) c FROM site_issues WHERE status='open'`).first()).c;
     return json(out);
   });
 
@@ -96,8 +103,9 @@ export function registerAdmin(r) {
       `SELECT n.*, CASE WHEN nr.user_id IS NULL THEN 0 ELSE 1 END AS read FROM notifications n
        LEFT JOIN notification_reads nr ON nr.notification_id=n.id AND nr.user_id=?
        WHERE (n.user_id = ? OR (n.user_id IS NULL AND (n.module IS NULL OR n.module IN (${ph}))))
+       AND n.id NOT IN (SELECT notification_id FROM notification_dismissals WHERE user_id=?)
        AND n.created_at >= datetime('now','-30 days') ORDER BY n.id DESC LIMIT 60`
-    ).bind(ctx.user.id, ctx.user.id, ...perms).all();
+    ).bind(ctx.user.id, ctx.user.id, ...perms, ctx.user.id).all();
     return json({ items: results, unread: results.filter((n) => !n.read).length });
   });
   r.post('/api/admin/notifications/read', async (req, env, _p, ctx) => {
@@ -111,14 +119,20 @@ export function registerAdmin(r) {
   // ───────────────────────── Users & access ─────────────────────────
   r.get('/api/admin/users', async (req, env, _p, ctx) => {
     requirePerm(ctx.user, 'users', 'installations', 'attendance');
-    const { results } = await env.DB.prepare('SELECT id,name,email,phone,job_title,role,permissions,active,avatar,last_login_at,created_at FROM users ORDER BY active DESC, role, name').all();
+    const { results } = await env.DB.prepare(`SELECT id,name,email,phone,job_title,role,permissions,active,avatar,last_login_at,created_at,profile_completed_at,profile FROM users
+      ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, active DESC, name`).all();
     const full = can(ctx.user, 'users');
-    return json({ items: results.map((u) => (full ? { ...u, permissions: parseJSON(u.permissions, []) } : pick(u, ['id', 'name', 'job_title', 'role', 'active', 'avatar']))) });
+    return json({ items: results.map((u) => {
+      const p = parseJSON(u.profile, {});
+      const base = { ...u, profile: undefined, branch: p.branch || '', profile_complete: u.role === 'owner' || !!u.profile_completed_at };
+      return full ? { ...base, permissions: parseJSON(u.permissions, []) } : pick(base, ['id', 'name', 'job_title', 'role', 'active', 'avatar', 'phone', 'branch', 'profile_complete']);
+    }) });
   });
 
+  // There is one administrator (the owner). Managing logins and company settings stays with them.
+  const OWNER_ONLY = ['users', 'settings'];
   const sanitizePerms = (actor, perms) => {
-    const list = (Array.isArray(perms) ? perms : []).filter((p) => MODULE_KEYS.includes(p));
-    // Admins can only grant what they themselves have.
+    const list = (Array.isArray(perms) ? perms : []).filter((p) => MODULE_KEYS.includes(p) && !OWNER_ONLY.includes(p));
     return actor.role === 'owner' ? list : list.filter((p) => can(actor, p));
   };
 
@@ -127,8 +141,8 @@ export function registerAdmin(r) {
     const b = await readJson(req, 16384);
     const name = str(b.name, 120), email = str(b.email, 160)?.toLowerCase();
     if (!name || !isEmail(email)) fail(400, 'Name and a valid work email are required');
-    const role = ['admin', 'staff'].includes(b.role) ? b.role : 'staff';
-    const perms = sanitizePerms(ctx.user, b.permissions?.length ? b.permissions : role === 'staff' ? ['field'] : ['dashboard']);
+    const role = 'staff';
+    const perms = sanitizePerms(ctx.user, b.permissions?.length ? b.permissions : ['field']);
     if (await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first()) fail(409, 'A user with that email already exists');
     const temp = generatePassword();
     const { hash, salt } = await hashPassword(temp);
@@ -150,7 +164,6 @@ export function registerAdmin(r) {
     if ('email' in b) { if (!isEmail(b.email)) fail(400, 'Invalid email'); data.email = str(b.email, 160).toLowerCase(); }
     if ('phone' in b) data.phone = normPhone(b.phone);
     if ('job_title' in b) data.job_title = str(b.job_title, 80);
-    if ('role' in b && target.role !== 'owner') data.role = ['admin', 'staff'].includes(b.role) ? b.role : target.role;
     if ('permissions' in b && target.role !== 'owner') data.permissions = JSON.stringify(sanitizePerms(ctx.user, b.permissions));
     if ('active' in b && target.role !== 'owner') data.active = bool(b.active);
     data.updated_at = now();
@@ -201,7 +214,7 @@ export function registerAdmin(r) {
     requirePerm(ctx.user, 'settings', 'website', 'shop');
     const s = await getSettings(env);
     return json({ settings: s, secrets: {
-      resend: !!env.RESEND_API_KEY, paystack: !!env.PAYSTACK_SECRET_KEY, turnstile: !!env.TURNSTILE_SECRET,
+      resend: !!env.RESEND_API_KEY, paystack: !!env.PAYSTACK_SECRET_KEY, turnstile: !!env.TURNSTILE_SECRET, spitch: !!env.SPITCH_API_KEY,
     } });
   });
   r.put('/api/admin/settings/:key', async (req, env, { key }, ctx) => {
@@ -443,7 +456,7 @@ export function registerAdmin(r) {
     },
     json: ['specs', 'images'], required: ['name'],
     search: ['name', 'sku', 'brand'], filters: ['category', 'in_shop', 'active'],
-    listHook: (u, where) => { if (u.searchParams.get('low') === '1') where.push('stock <= reorder_level'); },
+    listHook: (u, where) => { if (u.searchParams.get('low') === '1') where.push('reorder_level > 0 AND stock <= reorder_level'); },
     beforeSave: async (d, { env, existing, body }) => {
       if (d.name && (!existing || !existing.slug) && !d.slug) d.slug = slugify(d.name);
       if (d.slug) {
@@ -472,7 +485,7 @@ export function registerAdmin(r) {
     const p = await env.DB.prepare('UPDATE products SET stock = stock + ?, updated_at=? WHERE id=? RETURNING id, name, stock, reorder_level').bind(qty, now(), id).first();
     if (!p) fail(404, 'Product not found');
     await env.DB.prepare('INSERT INTO stock_moves (product_id, qty, reason, ref, note, user_id) VALUES (?,?,?,?,?,?)').bind(id, qty, reason, str(b.ref, 80), str(b.note, 300), ctx.user.id).run();
-    if (p.stock <= p.reorder_level) await notify(env, { module: 'inventory', type: 'warning', title: `Low stock: ${p.name}`, body: `${p.stock} left (reorder level ${p.reorder_level})`, link: '/admin/#/inventory' });
+    if (p.reorder_level > 0 && p.stock <= p.reorder_level) await notify(env, { module: 'inventory', type: 'warning', title: `Low stock: ${p.name}`, body: `${p.stock} left (reorder level ${p.reorder_level})`, link: '/admin/#/inventory' });
     return ok({ stock: p.stock });
   });
 
@@ -487,7 +500,7 @@ export function registerAdmin(r) {
   r.get('/api/admin/inventory-summary', async (req, env, _p, ctx) => {
     requirePerm(ctx.user, 'inventory');
     const s = await env.DB.prepare(`SELECT COUNT(*) items, COALESCE(SUM(stock),0) units, COALESCE(SUM(stock*cost),0) cost_value, COALESCE(SUM(stock*price),0) retail_value,
-      SUM(CASE WHEN stock <= reorder_level THEN 1 ELSE 0 END) low, SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) out_of_stock FROM products WHERE active=1`).first();
+      SUM(CASE WHEN reorder_level > 0 AND stock <= reorder_level THEN 1 ELSE 0 END) low, SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) out_of_stock FROM products WHERE active=1`).first();
     const cats = (await env.DB.prepare('SELECT category, COUNT(*) n, SUM(stock) units FROM products WHERE active=1 GROUP BY category').all()).results;
     return json({ ...s, categories: cats });
   });
@@ -750,7 +763,12 @@ export function registerAdmin(r) {
     fields: { platform: 'str:60', icon: 'str:60', url: 'str:300', active: 'bool', sort: 'int' }, required: ['platform', 'icon', 'url'],
     beforeSave: (d) => { if (d.icon && !/^ri-[a-z0-9-]+$/.test(d.icon)) fail(400, 'Choose an icon from the icon picker'); if (d.url && !/^(https?:|mailto:|tel:)/.test(d.url)) fail(400, 'Link must start with https://'); return d; } });
   crud(r, { name: 'popups', table: 'popups', perm: 'website', hasUpdatedAt: false,
-    fields: { title: 'str:200', body: 'text:2000', image: 'str:300', cta_text: 'str:60', cta_url: 'str:300', style: 'str:20', pages: 'str:500', trigger: 'str:20', delay_seconds: 'int', frequency: 'str:20', starts_at: 'date', ends_at: 'date', active: 'bool' }, required: ['title'] });
+    fields: { title: 'str:200', body: 'text:2000', image: 'str:300', cta_text: 'str:60', cta_url: 'str:300', style: 'str:20', pages: 'str:500', trigger: 'str:20', delay_seconds: 'int', frequency: 'str:20', starts_at: 'date', ends_at: 'date', active: 'bool' }, required: ['title'],
+    beforeSave: (d) => {
+      if (d.cta_url && !/^(\/|#|https:\/\/|http:\/\/|tel:|mailto:)/i.test(d.cta_url)) fail(400, 'The button link must be a page of the website or start with https://');
+      if (d.style && !['modal', 'corner', 'banner'].includes(d.style)) d.style = 'modal';
+      return d;
+    } });
   crud(r, { name: 'faqs', table: 'faqs', perm: 'website', order: 'sort, id', hasUpdatedAt: false,
     fields: { question: 'str:300', answer: 'text:4000', category: 'str:40', published: 'bool', sort: 'int' }, required: ['question', 'answer'], search: ['question'] });
   crud(r, { name: 'packages', table: 'packages', perm: 'website', readPerm: ['website', 'quotes'], order: 'sort, id', hasUpdatedAt: false,

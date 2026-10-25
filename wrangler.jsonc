@@ -21,6 +21,11 @@
       "/projects/*",
       "/shop/*",
       "/faq",
+      "/privacy",
+      "/terms",
+      "/installation-policy",
+      "/support-policy",
+      "/accessibility",
       "/q/*",
       "/sitemap.xml",
       "/robots.txt",
@@ -59,4 +64,5 @@
   //   RESEND_API_KEY        – send emails from the CRM
   //   PAYSTACK_SECRET_KEY   – verify online shop payments
   //   TURNSTILE_SECRET      – spam protection on public forms
+  //   SPITCH_API_KEY        – natural Nigerian voices (English, Yoruba, Igbo, Hausa) for the chat assistant
 }

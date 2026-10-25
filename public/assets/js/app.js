@@ -10,28 +10,19 @@ export { mountVideo };
 
 const html = document.documentElement;
 
-/* ── Theme: auto (follows Lagos time) / day / night ── */
+/* ── Theme: day / night. Until the visitor picks one, the site quietly matches the time in Lagos. ── */
 function initTheme() {
-  const btn = $('[data-theme-toggle]');
-  if (!btn) return;
-  const label = () => {
-    const mode = html.dataset.themeMode;
-    btn.setAttribute('aria-label', `Theme: ${mode === 'auto' ? 'automatic (follows the sun in Lagos)' : mode}. Click to change.`);
-    btn.title = mode === 'auto' ? 'Auto — follows the sun' : mode === 'day' ? 'Day mode' : 'Night mode';
-  };
-  btn.addEventListener('click', () => {
-    const order = ['auto', 'day', 'night'];
-    const next = order[(order.indexOf(html.dataset.themeMode || 'auto') + 1) % 3];
-    const h = (new Date().getUTCHours() + 1 + new Date().getUTCMinutes() / 60) % 24;
-    const theme = next === 'auto' ? (h >= 6.6 && h < 18.75 ? 'day' : 'night') : next;
+  const btns = $$('[data-set-theme]');
+  const sync = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.setTheme === html.dataset.theme)));
+  btns.forEach((b) => b.addEventListener('click', () => {
+    const next = b.dataset.setTheme;
     html.dataset.themeMode = next;
-    html.dataset.theme = theme;
+    html.dataset.theme = next;
     try { localStorage.setItem('vs-theme', next); } catch {}
-    label();
-    toast(next === 'auto' ? 'Auto: the site follows the sun in Lagos' : next === 'day' ? 'Day mode' : 'Night mode');
+    sync();
     window.dispatchEvent(new Event('vs:theme'));
-  });
-  label();
+  }));
+  sync();
 }
 
 /* ── Header & navigation ── */
@@ -164,13 +155,14 @@ function initPopups(site) {
     wrap.setAttribute('role', p.style === 'banner' ? 'region' : 'dialog');
     wrap.setAttribute('aria-label', p.title);
     wrap.innerHTML = `<div class="box">${p.image && p.style !== 'banner' ? `<img src="${esc(p.image)}" alt="">` : ''}<div class="content"><h2>${esc(p.title)}</h2>${p.body ? `<p>${esc(p.body)}</p>` : ''}
-      ${p.cta_text && p.cta_url ? `<a class="btn ${p.style === 'banner' ? 'btn-ghost btn-sm' : 'btn-primary'}" href="${esc(p.cta_url)}" data-pop-cta>${esc(p.cta_text)}</a>` : ''}</div>
+      ${p.cta_text && p.cta_url ? `<a class="btn ${p.style === 'banner' ? 'btn-ghost btn-sm' : 'btn-primary'}" href="${esc(p.cta_url)}" data-pop-cta${p.cta_url === '#chat' ? ' data-open-chat' : ''}${/^https?:/.test(p.cta_url) && !p.cta_url.startsWith(location.origin) ? ' target="_blank" rel="noopener"' : ''}>${esc(p.cta_text)}</a>` : ''}</div>
       <button class="icon-btn close" type="button" aria-label="Close"><i class="ri-close-line" aria-hidden="true"></i></button></div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     wrap.querySelector('.close').addEventListener('click', close);
     if (p.style === 'modal') wrap.addEventListener('click', (e) => e.target === wrap && close());
     document.addEventListener('keydown', function k(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', k); } });
+    wrap.querySelector('[data-pop-cta]')?.addEventListener('click', () => { if (p.cta_url === '#chat') close(); }, true);
     wrap.querySelector('[data-pop-cta]')?.addEventListener('click', () => navigator.sendBeacon?.(`/api/public/popup/${p.id}/stat`, new Blob([JSON.stringify({ kind: 'click' })], { type: 'application/json' })));
     if (p.style === 'modal') wrap.querySelector('.close').focus();
     seen[p.id] = Date.now(); store.set('vs-popups', seen);
@@ -183,15 +175,22 @@ function initPopups(site) {
   else setTimeout(show, (p.delay_seconds || 6) * 1000);
 }
 
-/* ── Consent (NDPA-friendly) ── */
-function initConsent() {
-  if (store.get('vs-consent')) return;
+/* ── Consent for optional tools (NDPA-friendly). Our own cookie-free visit counting always runs. ── */
+function initConsent(site) {
+  const ga = site?.seo?.ga4_id && /^G-[A-Z0-9]+$/.test(site.seo.ga4_id);
+  if (!ga || store.get('vs-consent')) return;
   const bar = document.createElement('div');
-  bar.className = 'consent'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Privacy notice');
-  bar.innerHTML = `<p data-i18n="consent.text">We use privacy-friendly, cookie-free analytics to improve this site. No personal data is sold. <a href="/privacy">Learn more</a></p>
-    <div class="btn-row"><button class="btn btn-ghost btn-sm" type="button" data-c="declined" data-i18n="consent.no">No thanks</button><button class="btn btn-primary btn-sm" type="button" data-c="accepted" data-i18n="consent.ok">OK</button></div>`;
+  bar.className = 'consent'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Privacy choices');
+  bar.innerHTML = `<p>We count visits to improve this site without cookies or personal data. May we also use Google Analytics? <a href="/privacy">Learn more</a></p>
+    <div class="btn-row"><button class="btn btn-ghost btn-sm" type="button" data-c="declined">No thanks</button><button class="btn btn-ghost btn-sm" type="button" data-c="accepted" style="background:var(--heading);color:var(--bg);border-color:var(--heading)">Allow</button></div>`;
   document.body.appendChild(bar);
-  bar.addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; store.set('vs-consent', b.dataset.c); bar.remove(); });
+  bar.addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; store.set('vs-consent', b.dataset.c); bar.remove(); if (b.dataset.c === 'accepted') loadGa(site); });
+}
+function loadGa(site) {
+  const id = site?.seo?.ga4_id;
+  if (!id || !/^G-[A-Z0-9]+$/.test(id) || store.get('vs-consent') !== 'accepted' || window.gtag) return;
+  const g = document.createElement('script'); g.async = true; g.src = `https://www.googletagmanager.com/gtag/js?id=${id}`; document.head.appendChild(g);
+  window.dataLayer = window.dataLayer || []; window.gtag = function () { window.dataLayer.push(arguments); }; window.gtag('js', new Date()); window.gtag('config', id, { anonymize_ip: true });
 }
 
 /* ── Media: lightbox, lazy video embeds ── */
@@ -252,7 +251,7 @@ function initMisc() {
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-optout]');
-    if (b) { store.set('vs-consent', 'declined'); b.textContent = 'Analytics turned off on this device'; b.disabled = true; }
+    if (b) { store.set('vs-consent', 'declined'); b.textContent = 'Google Analytics turned off on this device'; b.disabled = true; }
   });
   // Track key CTAs
   document.addEventListener('click', (e) => {
@@ -274,12 +273,9 @@ async function boot() {
   renderSite(site);
   initCart(site ? site.shop.enabled : true);
   initChat();
-  initConsent();
+  initConsent(site);
   initPopups(site);
-  if (site?.seo?.ga4_id && /^G-[A-Z0-9]+$/.test(site.seo.ga4_id) && store.get('vs-consent') === 'accepted') {
-    const g = document.createElement('script'); g.async = true; g.src = `https://www.googletagmanager.com/gtag/js?id=${site.seo.ga4_id}`; document.head.appendChild(g);
-    window.dataLayer = window.dataLayer || []; window.gtag = function () { window.dataLayer.push(arguments); }; window.gtag('js', new Date()); window.gtag('config', site.seo.ga4_id, { anonymize_ip: true });
-  }
+  loadGa(site);
   const lg = html.getAttribute('lang');
   if (lg && lg !== 'en') applyLang(lg);
   const page = document.body.dataset.page;

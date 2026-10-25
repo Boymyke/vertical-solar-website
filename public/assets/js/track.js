@@ -1,13 +1,14 @@
 // Privacy-friendly first-party analytics: page views, time on page, scroll depth, clicks for heatmaps.
-// No cookies, no IP stored. Visitors can opt out from the consent bar or /privacy.
+// No cookies, no IP stored, no personal data — so it always runs. Optional third-party tools (Google Analytics)
+// only load after the visitor agrees in the consent bar.
 import { store } from './core.js';
 
 const ENDPOINT = '/api/public/track';
 const rid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 36);
 
 export function trackingAllowed() {
-  if (new URLSearchParams(location.search).has('vs_heatmap')) return false;
-  return store.get('vs-consent') !== 'declined';
+  // Don't count staff previewing the heatmap overlay.
+  return !new URLSearchParams(location.search).has('vs_heatmap');
 }
 
 function send(body) {

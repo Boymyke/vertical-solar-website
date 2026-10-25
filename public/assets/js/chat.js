@@ -1,8 +1,11 @@
 // "Sola" — the Vertical Solar AI assistant. Text chat, voice dictation and hands-free voice conversation.
 import { $, esc, api, store, getSite } from './core.js';
-import { currentLang, LANGS } from './i18n.js';
+import { currentLang } from './i18n.js';
 
-const SPEECH_LANG = { en: 'en-NG', ig: 'ig-NG', ha: 'ha-NG', yo: 'yo-NG' };
+const SPEECH_LANG = { en: 'en-NG', pcm: 'en-NG', ig: 'ig-NG', ha: 'ha-NG', yo: 'yo-NG' };
+const CHAT_LANGS = { en: 'English', pcm: 'Pidgin', yo: 'Yorùbá', ig: 'Igbo', ha: 'Hausa' };
+const PLACEHOLDER = { en: 'Ask about packages, prices, financing…', pcm: 'Ask me anything about solar…', yo: 'Béèrè nípa oòrùn, iye owó…', ig: 'Jụọ maka sola, ọnụahịa…', ha: 'Tambaya game da sola, farashi…' };
+const chatLang = () => { const l = store.get('vs-chat-lang', null); return CHAT_LANGS[l] ? l : (CHAT_LANGS[currentLang()] ? currentLang() : 'en'); };
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let state = { chatId: store.get('vs-chat-id'), open: false, lastAgentId: 0, busy: false };
 let panel, log, input, site;
@@ -33,7 +36,7 @@ function addMsg(role, text, { speakable = true, raw = false } = {}) {
   else {
     const { html, links } = md(text);
     div.innerHTML = html + (links.length ? `<div class="links">${links.map((l) => `<a href="${l.url}"><i class="ri-arrow-right-up-line" aria-hidden="true"></i>${l.label}</a>`).join('')}</div>` : '') +
-      (speakable && 'speechSynthesis' in window ? `<button class="speak" type="button"><i class="ri-volume-up-line" aria-hidden="true"></i> Listen</button>` : '');
+      (speakable && ('speechSynthesis' in window || site?.voice?.natural) ? `<button class="speak" type="button"><i class="ri-volume-up-line" aria-hidden="true"></i> Listen</button>` : '');
     div.querySelector('.speak')?.addEventListener('click', () => speak(text));
   }
   log.appendChild(div);
@@ -47,18 +50,40 @@ function typing(on) {
   if (!on && t) t.remove();
 }
 
-function speak(text, onend) {
+// Speaking: Nigerian voices from the server when available, otherwise the best voice the browser has
+// (Edge ships Nigerian English voices; others fall back to British or any English voice).
+let audioEl = null;
+function stopSpeaking() { try { speechSynthesis.cancel(); } catch {} if (audioEl) { audioEl.pause(); audioEl = null; } }
+function browserVoice(l) {
+  const vs = 'speechSynthesis' in window ? speechSynthesis.getVoices() : [];
+  const want = SPEECH_LANG[l] || 'en-NG';
+  return vs.find((x) => x.lang.toLowerCase() === want.toLowerCase()) || vs.find((x) => x.lang.toLowerCase().startsWith(l + '-'))
+    || vs.find((x) => /en[-_]NG/i.test(x.lang)) || vs.find((x) => /en[-_]GB/i.test(x.lang)) || vs.find((x) => /^en/i.test(x.lang));
+}
+function speakBrowser(text, l, onend) {
   if (!('speechSynthesis' in window)) { onend?.(); return; }
-  speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(plain(text));
-  const l = currentLang();
-  const vs = speechSynthesis.getVoices();
-  const v = vs.find((x) => x.lang.toLowerCase().startsWith(l)) || vs.find((x) => /en-NG/i.test(x.lang)) || vs.find((x) => /en-GB/i.test(x.lang)) || vs.find((x) => /^en/i.test(x.lang));
-  if (v) u.voice = v;
-  u.rate = 1.02;
-  u.onend = () => onend?.();
-  u.onerror = () => onend?.();
+  const v = browserVoice(l); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = SPEECH_LANG[l] || 'en-NG';
+  u.rate = 1;
+  u.onend = () => onend?.(); u.onerror = () => onend?.();
   speechSynthesis.speak(u);
+}
+async function speak(text, onend) {
+  stopSpeaking();
+  const l = chatLang();
+  if (site?.voice?.natural) {
+    try {
+      const r = await fetch('/api/public/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: plain(text).slice(0, 900), lang: l }) });
+      if (!r.ok) throw new Error('voice');
+      const url = URL.createObjectURL(await r.blob());
+      audioEl = new Audio(url);
+      audioEl.onended = () => { URL.revokeObjectURL(url); audioEl = null; onend?.(); };
+      audioEl.onerror = () => { URL.revokeObjectURL(url); audioEl = null; speakBrowser(text, l, onend); };
+      await audioEl.play();
+      return;
+    } catch { /* fall through to the browser voice */ }
+  }
+  speakBrowser(text, l, onend);
 }
 
 async function send(text, mode = 'text') {
@@ -68,7 +93,7 @@ async function send(text, mode = 'text') {
   addMsg('user', text);
   typing(true);
   try {
-    const r = await api('/api/public/chat', { body: { chat_id: state.chatId, message: text, lang: currentLang(), mode, page: location.pathname, visitor_id: store.get('vs-vid') } });
+    const r = await api('/api/public/chat', { body: { chat_id: state.chatId, message: text, lang: chatLang(), mode, page: location.pathname, visitor_id: store.get('vs-vid') } });
     state.chatId = r.chat_id; store.set('vs-chat-id', r.chat_id);
     typing(false);
     if (r.reply) { addMsg('bot', r.reply, { raw: true }); saveHistory(); return r.reply; }
@@ -89,9 +114,9 @@ function saveHistory() {
 let rec = null, mediaRec = null;
 async function dictate(btn) {
   if (rec || mediaRec) { rec?.stop(); mediaRec?.stop(); return; }
-  if (SR) {
+  if (SR && useBrowserStt()) {
     rec = new SR();
-    rec.lang = SPEECH_LANG[currentLang()] || 'en-NG';
+    rec.lang = SPEECH_LANG[chatLang()] || 'en-NG';
     rec.interimResults = true;
     btn.classList.add('rec'); btn.setAttribute('aria-pressed', 'true');
     rec.onresult = (e) => { input.value = [...e.results].map((r) => r[0].transcript).join(' '); autoGrow(); };
@@ -104,12 +129,19 @@ async function dictate(btn) {
   }
 }
 
+// English and Pidgin: the browser's recogniser (fast, live captions). Yoruba, Igbo and Hausa: record and
+// transcribe on the server, which is trained for Nigerian languages.
+const useBrowserStt = () => ['en', 'pcm'].includes(chatLang());
+const REC_TYPES = ['audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
 async function recordAndTranscribe(btn, maxMs = 15000) {
-  if (!navigator.mediaDevices?.getUserMedia) { alert('Voice input is not supported in this browser.'); return ''; }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { addMsg('bot', 'Voice input is not supported in this browser. Please type your message.', { speakable: false }); return ''; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { addMsg('bot', 'Please allow microphone access to talk to me, or type your message.', { speakable: false }); return ''; }
   return new Promise((resolve) => {
     const chunks = [];
-    mediaRec = new MediaRecorder(stream);
+    const mimeType = REC_TYPES.find((t) => MediaRecorder.isTypeSupported?.(t));
+    mediaRec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     btn?.classList.add('rec');
     mediaRec.ondataavailable = (e) => chunks.push(e.data);
     mediaRec.onstop = async () => {
@@ -118,7 +150,7 @@ async function recordAndTranscribe(btn, maxMs = 15000) {
       mediaRec = null;
       try {
         const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-        const r = await fetch(`/api/public/transcribe?lang=${currentLang()}`, { method: 'POST', body: blob });
+        const r = await fetch(`/api/public/transcribe?lang=${chatLang()}`, { method: 'POST', headers: { 'content-type': blob.type || 'audio/webm' }, body: blob });
         const d = await r.json();
         resolve(d.text || '');
       } catch { resolve(''); }
@@ -149,9 +181,9 @@ function listenOnce() {
     if (reply) { voiceUi('speaking', plain(reply).slice(0, 220)); speak(reply, () => voice.on && listenOnce()); }
     else voiceUi('idle');
   };
-  if (SR) {
+  if (SR && useBrowserStt()) {
     const r = new SR();
-    r.lang = SPEECH_LANG[currentLang()] || 'en-NG';
+    r.lang = SPEECH_LANG[chatLang()] || 'en-NG';
     r.interimResults = true;
     let final = '';
     r.onresult = (e) => { final = [...e.results].map((x) => x[0].transcript).join(' '); $('[data-vtext]', voice.stage).textContent = final; };
@@ -170,22 +202,22 @@ function openVoice() {
   voice.stage.className = 'voice-stage';
   voice.stage.innerHTML = `<button class="orb" type="button" aria-label="Talk to Sola"></button><strong data-vstatus aria-live="polite"></strong><p data-vtext></p>
     <div class="btn-row"><button class="btn btn-light btn-sm" type="button" data-vend><i class="ri-keyboard-line" aria-hidden="true"></i> Back to typing</button></div>
-    <small style="opacity:.7">Speaks ${LANGS[currentLang()]}. Voice works best in Chrome or Edge.</small>`;
+    <small style="opacity:.75"><span translate="no">${CHAT_LANGS[chatLang()]}</span> · <span>${useBrowserStt() ? 'Talk, then pause — I reply when you stop.' : 'Talk for up to 8 seconds, then wait for my reply.'}</span></small>`;
   panel.appendChild(voice.stage);
-  $('.orb', voice.stage).addEventListener('click', () => { speechSynthesis?.cancel(); voice.rec?.abort?.(); listenOnce(); });
+  $('.orb', voice.stage).addEventListener('click', () => { stopSpeaking(); voice.rec?.abort?.(); mediaRec?.stop(); listenOnce(); });
   $('[data-vend]', voice.stage).addEventListener('click', closeVoice);
   listenOnce();
 }
 function closeVoice() {
   voice.on = false;
   voice.rec?.abort?.();
-  speechSynthesis?.cancel();
+  stopSpeaking();
   voice.stage?.remove();
   voice.stage = null;
   input?.focus();
 }
 
-function autoGrow() { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px'; }
+function autoGrow() { input.style.height = 'auto'; input.style.height = Math.min(140, input.scrollHeight) + 'px'; }
 
 async function pollAgent() {
   if (!state.chatId || !state.open) return;
@@ -205,13 +237,16 @@ function build() {
   panel.setAttribute('aria-label', 'Chat with Sola, the Vertical Solar assistant');
   const name = site?.ai?.assistant_name || 'Sola';
   panel.innerHTML = `
-    <div class="chat-head"><span class="avatar"><i class="ri-sun-line" aria-hidden="true"></i></span><div><strong>${esc(name)}</strong><small>Vertical Solar assistant</small></div>
-      ${site?.features?.voice_enabled !== false ? '<button class="icon-btn" type="button" data-voice aria-label="Start a voice conversation"><i class="ri-voiceprint-line" aria-hidden="true"></i></button>' : ''}
+    <div class="chat-head"><span class="avatar"><i class="ri-sun-line" aria-hidden="true"></i></span><div style="min-width:0"><strong>${esc(name)}</strong><small>Vertical Solar assistant</small></div>
+      <label class="sr-only" for="chat-lang">Chat language</label>
+      <select id="chat-lang" class="chat-lang" data-chat-lang translate="no" title="Language Sola speaks">${Object.entries(CHAT_LANGS).map(([k, v]) => `<option value="${k}"${k === chatLang() ? ' selected' : ''}>${v}</option>`).join('')}</select>
+      ${site?.features?.voice_enabled !== false ? '<button class="icon-btn" type="button" data-voice aria-label="Start a voice conversation" title="Talk to Sola"><i class="ri-voiceprint-line" aria-hidden="true"></i></button>' : ''}
+      <button class="icon-btn" type="button" data-chat-expand aria-label="Make the chat bigger" aria-pressed="false" title="Bigger window"><i class="ri-fullscreen-line" aria-hidden="true"></i></button>
       <button class="icon-btn" type="button" data-close aria-label="Close chat"><i class="ri-close-line" aria-hidden="true"></i></button></div>
     <div class="chat-log" aria-live="polite"></div>
     <div class="chips"></div>
     <form class="chat-input"><label class="sr-only" for="chat-text">Message</label>
-      <textarea id="chat-text" rows="1" placeholder="Ask about packages, prices, financing…" maxlength="1500"></textarea>
+      <textarea id="chat-text" rows="1" placeholder="Ask about packages, prices, financing…" maxlength="1500" translate="no"></textarea>
       <button class="icon-btn mic" type="button" aria-label="Speak your message" aria-pressed="false"><i class="ri-mic-line" aria-hidden="true"></i></button>
       <button class="icon-btn send" type="submit" aria-label="Send"><i class="ri-send-plane-2-fill" aria-hidden="true"></i></button></form>
     <div class="chat-foot">AI answers can be wrong — our team confirms all quotes. <a href="/privacy">Privacy</a></div>`;
@@ -228,6 +263,12 @@ function build() {
   $('.mic', panel).addEventListener('click', (e) => dictate(e.currentTarget));
   $('[data-close]', panel).addEventListener('click', () => toggle(false));
   $('[data-voice]', panel)?.addEventListener('click', openVoice);
+  $('[data-chat-lang]', panel).addEventListener('change', (e) => { store.set('vs-chat-lang', e.target.value); stopSpeaking(); input.placeholder = PLACEHOLDER[e.target.value] || PLACEHOLDER.en; });
+  const exp = $('[data-chat-expand]', panel);
+  const setWide = (on) => { panel.classList.toggle('is-wide', on); exp.setAttribute('aria-pressed', String(on)); exp.setAttribute('aria-label', on ? 'Make the chat smaller' : 'Make the chat bigger'); exp.innerHTML = `<i class="${on ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'}" aria-hidden="true"></i>`; try { sessionStorage.setItem('vs-chat-wide', on ? '1' : ''); } catch {} };
+  exp.addEventListener('click', () => setWide(!panel.classList.contains('is-wide')));
+  try { if (sessionStorage.getItem('vs-chat-wide')) setWide(true); } catch {}
+  input.placeholder = PLACEHOLDER[chatLang()] || PLACEHOLDER.en;
   panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
 
   let restored = [];
@@ -243,12 +284,13 @@ export function toggle(open = !state.open) {
   panel.hidden = !open;
   document.querySelector('.fab-chat')?.setAttribute('aria-expanded', String(open));
   document.querySelector('.fab-chat .ping')?.remove();
-  if (open) { input.focus(); pollAgent(); } else { closeVoice(); document.querySelector('.fab-chat')?.focus(); }
+  if (open) { input.focus(); pollAgent(); } else { closeVoice(); stopSpeaking(); document.querySelector('.fab-chat')?.focus(); }
 }
 
 export async function initChat() {
   site = await getSite();
   if (site && site.features?.chat_enabled === false) return;
+  try { speechSynthesis.getVoices(); } catch {} // starts loading the voice list
   const stack = document.querySelector('.fab-stack');
   const fab = document.createElement('button');
   fab.className = 'fab fab-chat';

@@ -1,6 +1,7 @@
 // Authentication, sessions, permissions, rate limiting, audit + notifications.
 import { HttpError, clientIp } from './http.js';
 import { randomToken, sha256, now, sqlDate, parseJSON } from './util.js';
+import { pushToUsers, recipients } from './push.js';
 
 export const MODULES = {
   dashboard: 'Dashboard',
@@ -87,7 +88,7 @@ export async function getSessionUser(env, req) {
   if (!token) return null;
   const id = await sha256(token);
   const row = await env.DB.prepare(
-    `SELECT u.id, u.name, u.email, u.phone, u.role, u.permissions, u.active, u.avatar, u.job_title, u.must_change_password, s.id AS session_id
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.permissions, u.active, u.avatar, u.job_title, u.must_change_password, u.profile_completed_at, s.id AS session_id
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > datetime('now')`
   ).bind(id).first();
@@ -147,7 +148,11 @@ export async function audit(env, req, user, action, entity, entityId, meta) {
   } catch (e) { console.error('audit failed', e); }
 }
 
-export async function notify(env, { module = null, userId = null, type = 'info', title, body = null, link = null }) {
+// In-app notification. Personal ones and urgent ones also wake phones through Web Push.
+export async function notify(env, { module = null, userId = null, type = 'info', title, body = null, link = null, push } = {}) {
   await env.DB.prepare('INSERT INTO notifications (user_id, module, type, title, body, link, created_at) VALUES (?,?,?,?,?,?,?)')
     .bind(userId, module, type, title, body, link, now()).run();
+  if (push ?? (!!userId || type === 'danger')) {
+    await recipients(env, { userId, module }).then((ids) => pushToUsers(env, ids, { urgent: type === 'danger' || type === 'warning' })).catch((e) => console.error('push', e));
+  }
 }

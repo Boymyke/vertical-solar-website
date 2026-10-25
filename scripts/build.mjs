@@ -15,6 +15,7 @@ const nm = 'node_modules';
 copy(`${nm}/@fontsource-variable/lexend/files/lexend-latin-wght-normal.woff2`, 'public/assets/fonts/lexend-latin-wght-normal.woff2');
 copy(`${nm}/@fontsource-variable/lexend/files/lexend-latin-ext-wght-normal.woff2`, 'public/assets/fonts/lexend-latin-ext-wght-normal.woff2');
 copy(`${nm}/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2`, 'public/assets/fonts/inter-latin-wght-normal.woff2');
+for (const sub of ['latin', 'latin-ext', 'vietnamese']) copy(`${nm}/@fontsource-variable/inter-tight/files/inter-tight-${sub}-wght-normal.woff2`, `public/assets/fonts/inter-tight-${sub}-wght-normal.woff2`);
 for (const w of [400, 700]) copy(`${nm}/@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-${w}-normal.woff2`, `public/assets/fonts/atkinson-hyperlegible-latin-${w}-normal.woff2`);
 const ri = read(`${nm}/remixicon/fonts/remixicon.css`).replace(/src: url\("remixicon\.eot[\s\S]*?;\n/, 'src: url("remixicon.woff2") format("woff2");\n').replace(/^\s*src:.*remixicon\.eot\?#iefix.*$/m, '');
 write('public/assets/vendor/remixicon/remixicon.css', ri.replace(/@font-face\s*{[^}]*}/, `@font-face{font-family:"remixicon";src:url("remixicon.woff2") format("woff2");font-display:block}`));
@@ -84,14 +85,14 @@ function page(file) {
 <meta name="robots" content="${fm.noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}">
 <link rel="canonical" href="${url}">
 <link rel="alternate" hreflang="en-NG" href="${url}"><link rel="alternate" hreflang="x-default" href="${url}">
-<meta name="theme-color" content="#144211" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#12102E" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#EDEDE2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0B1512" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="${fm.ogType || 'website'}"><meta property="og:site_name" content="Vertical Solar Nigeria"><meta property="og:locale" content="en_NG">
 <meta property="og:title" content="${esc(fm.title)}"><meta property="og:description" content="${esc(fm.description)}"><meta property="og:url" content="${url}"><meta property="og:image" content="${og}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(fm.title)}"><meta name="twitter:description" content="${esc(fm.description)}"><meta name="twitter:image" content="${og}">
 <meta name="geo.region" content="NG-LA"><meta name="geo.placename" content="Lagos">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<link rel="preload" href="/assets/fonts/lexend-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/vendor/remixicon/remixicon.css">
 <link rel="stylesheet" href="/assets/css/site.css?v=${Date.now().toString(36)}">
 ${(fm.css || []).map((c) => `<link rel="stylesheet" href="${c}">`).join('\n')}

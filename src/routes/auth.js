@@ -77,6 +77,7 @@ export function registerAuth(r) {
     return json({
       id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, avatar: u.avatar, job_title: u.job_title,
       must_change_password: !!u.must_change_password, permissions: effectivePermissions(u), modules: MODULES,
+      profile_complete: u.role === 'owner' || !!u.profile_completed_at,
     });
   });
 
@@ -95,11 +96,4 @@ export function registerAuth(r) {
     return ok();
   });
 
-  r.put('/api/auth/profile', async (req, env, _p, ctx) => {
-    if (!ctx.user) fail(401, 'Not signed in');
-    const b = await readJson(req, 8192);
-    await env.DB.prepare('UPDATE users SET name=COALESCE(?, name), phone=?, avatar=?, updated_at=? WHERE id=?')
-      .bind(str(b.name, 120), str(b.phone, 30), str(b.avatar, 300), now(), ctx.user.id).run();
-    return ok();
-  });
 }

@@ -51,7 +51,7 @@ async function editor(ctx, id) {
       </div></div>
       <div class="card"><div class="card-h"><h2>System design</h2><select class="input" data-pkg style="width:auto;margin-left:auto"><option value="">Start from a package…</option>${pk.items.map((p) => `<option value="${p.id}">${esc(p.name)} — ${p.inverter_kva}kVA</option>`).join('')}</select>
         <select class="input" data-pkgbat style="width:auto"><option value="lead">Lead-acid price</option><option value="lithium">Lithium price</option></select></div>
-        <div class="card-b"><div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="card-b"><div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
           ${[['inverter_kva', 'Inverter (kVA)'], ['pv_kwp', 'Solar array (kWp)'], ['battery_kwh', 'Battery (kWh)'], ['daily_kwh', 'Daily energy (kWh)'], ['backup_hours', 'Backup (hours)']].map(([k, l]) => `<div class="field"><label>${l}</label><input class="input" type="number" step="any" data-sys="${k}" value="${esc(q.system[k] ?? '')}"></div>`).join('')}
           <div class="field"><label>Battery type</label><select class="input" data-sys="battery_type">${['', 'Lithium (LiFePO4)', 'Lead-acid / tubular'].map((b) => `<option ${b === q.system.battery_type ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
         </div></div></div>

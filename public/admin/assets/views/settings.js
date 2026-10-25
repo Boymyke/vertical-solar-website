@@ -1,13 +1,14 @@
 import { $, $$, api, esc, toast, fail, formHtml, readForm, bindWidgets, validate } from '../lib.js';
 
 export default async function ({ root, name, user, can, setTitle }) {
-  setTitle(name === 'profile' ? 'My profile' : 'Settings', name === 'profile' ? 'Your details and password' : 'Company details, shop & payments, integrations');
+  setTitle('Settings', 'Company details, shop & payments, and connected services', '<a class="btn" href="#/profile"><i class="ri-user-line"></i> My profile</a>');
   const qs = new URLSearchParams(location.hash.split('?')[1] || '');
-  const tabs = [['profile', 'My profile', true], ['company', 'Company', can('settings')], ['shop', 'Shop & payments', can('shop', 'settings')], ['integrations', 'Integrations', can('settings')]].filter((t) => t[2]);
-  let active = name === 'profile' ? 'profile' : qs.get('tab') || (tabs[1] || tabs[0])[0];
+  const tabs = [['company', 'Company', can('settings')], ['shop', 'Shop & payments', can('shop', 'settings')], ['integrations', 'Connected services', can('settings')]].filter((t) => t[2]);
+  if (!tabs.length) { location.hash = '#/profile'; return; }
+  let active = tabs.some((t) => t[0] === qs.get('tab')) ? qs.get('tab') : tabs[0][0];
   root.innerHTML = `<div class="tabs">${tabs.map(([k, l]) => `<button data-t="${k}" class="${k === active ? 'on' : ''}">${l}</button>`).join('')}</div><div data-tab style="max-width:880px"></div>`;
   const tab = $('[data-tab]', root);
-  const data = tabs.length > 1 ? await api('/api/admin/settings') : null;
+  const data = await api('/api/admin/settings');
   const group = (key, title, fields, sub = '', read) => {
     const v = data.settings[key];
     tab.innerHTML = `<div class="card"><div class="card-h"><div><h2>${title}</h2>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div><form class="card-b" data-f>${formHtml(fields, read?.in ? read.in(v) : v)}<div class="row" style="margin-top:14px"><button class="btn btn-primary"><i class="ri-save-line"></i> Save</button></div></form></div>`;
@@ -36,7 +37,7 @@ export default async function ({ root, name, user, can, setTitle }) {
       group('integrations', 'Integrations', [{ name: 'email_from_name', label: 'Email "from" name' }, { name: 'email_from', label: 'Email "from" address', type: 'email', placeholder: 'hello@verticalsolar.com.ng', hint: 'Must be on a domain verified in Resend.' },
         { name: 'notify_emails', label: 'Daily summary goes to', full: true, placeholder: 'owner@…, manager@…', hint: 'Morning email with new leads, due follow-ups, low stock and expiring warranties.' },
         { name: 'turnstile_site_key', label: 'Cloudflare Turnstile site key (spam protection, optional)', full: true }],
-        `Email sending: ${data.secrets.resend ? '✓ Resend key set' : '✗ RESEND_API_KEY not set'} · Turnstile secret: ${data.secrets.turnstile ? '✓ set' : '✗ not set'}`);
+        `Email sending: ${data.secrets.resend ? '✓ Resend key set' : '✗ RESEND_API_KEY not set'} · Spam protection: ${data.secrets.turnstile ? '✓ set' : '✗ not set'} · Nigerian voices: ${data.secrets.spitch ? '✓ Spitch key set' : '✗ SPITCH_API_KEY not set (browser voices are used)'}`);
     },
   };
   $$('[data-t]', root).forEach((b) => (b.onclick = () => { active = b.dataset.t; $$('[data-t]', root).forEach((x) => x.classList.toggle('on', x === b)); views[active](); }));

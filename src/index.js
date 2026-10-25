@@ -8,6 +8,7 @@ import { registerAdmin } from './routes/admin.js';
 import { registerField } from './routes/field.js';
 import { registerAnalytics } from './routes/analytics.js';
 import { registerSeo } from './routes/seo.js';
+import { registerStaff } from './routes/staff.js';
 import { everyTenMinutes, daily } from './cron.js';
 
 const router = new Router();
@@ -18,6 +19,7 @@ registerAdmin(router);
 registerField(router);
 registerAnalytics(router);
 registerSeo(router);
+registerStaff(router);
 
 const PRIVATE_API = /^\/api\/(admin|field|auth)\//;
 

@@ -36,7 +36,7 @@ export function inflate(row, jsonFields = []) {
 
 export function crud(r, cfg) {
   const {
-    name, table, perm, fields, json: jsonFields = [], search = [], filters = [], order = 'id DESC',
+    name, table, perm, fields, json: jsonFields = [], search = [], filters = [], order = `${cfg.table}.id DESC`,
     select = '*', from = table, readPerm = perm, required = [], beforeSave, afterSave, beforeDelete, hasUpdatedAt = true,
     canDelete = true, listHook, getExtra,
   } = cfg;

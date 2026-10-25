@@ -73,6 +73,7 @@ export async function getSettings(env) {
   const { results } = await env.DB.prepare('SELECT key, value FROM settings').all();
   const s = structuredClone(DEFAULT_SETTINGS);
   for (const r of results || []) {
+    if (!(r.key in s)) continue; // only known groups — never leak internal keys
     const v = parseJSON(r.value, null);
     if (v == null) continue;
     if (s[r.key] && typeof s[r.key] === 'object' && !Array.isArray(s[r.key]) && typeof v === 'object' && !Array.isArray(v)) {
@@ -93,9 +94,10 @@ export async function getPublicSite(env) {
        AND (ends_at IS NULL OR ends_at='' OR ends_at >= datetime('now')) ORDER BY id DESC`).all(),
     env.DB.prepare('SELECT * FROM packages WHERE published=1 ORDER BY sort, id').all(),
   ]);
-  const { integrations, ...rest } = settings;
+  const { integrations, ai, ...rest } = settings;
   return {
     ...rest,
+    ai: { assistant_name: ai.assistant_name, greeting: ai.greeting },
     integrations: { turnstile_site_key: integrations.turnstile_site_key },
     shop: { ...settings.shop, bank_details: settings.shop.bank_details },
     branches: (branches.results || []).map((b) => ({ ...b, phones: parseJSON(b.phones, []) })),
@@ -103,6 +105,7 @@ export async function getPublicSite(env) {
     certificates: certificates.results || [],
     popups: popups.results || [],
     packages: packages.results || [],
+    voice: { natural: !!env.SPITCH_API_KEY },
   };
 }
 

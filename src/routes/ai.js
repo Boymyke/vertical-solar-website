@@ -36,7 +36,7 @@ function systemPrompt(knowledge, settings, lang) {
   return `You are ${name}, the friendly, professional virtual assistant on the website of ${settings.company.name} (Nigeria).
 Only help with topics related to ${settings.company.name}, solar energy, inverters, batteries, power needs, pricing, financing, installation, maintenance and our services. Politely decline unrelated requests.
 Rules:
-- Reply in ${LANG_NAMES[lang] || 'English'}. Keep answers short (2–5 sentences or a few bullets), warm and clear. Use ₦ for prices.
+- Reply in the language the visitor writes in: English, Nigerian Pidgin, Igbo, Hausa or Yoruba. If you cannot tell, reply in ${LANG_NAMES[lang] || 'English'}. Use correct tone marks for Yoruba and Igbo. Keep answers short (2–5 sentences or a few bullets), warm and clear. Use ₦ for prices.
 - Use only the facts below. Never invent prices, stock, guarantees or staff names. If unsure, say a specialist will confirm and offer a free site survey.
 - When relevant, include 1–3 helpful links to our pages as markdown, e.g. [See packages](/packages). Only use paths from SITE PAGES or SHOP ITEMS.
 - To size a system, ask what appliances they want to run and for how many hours, or point them to the load calculator at /packages#calculator.
@@ -170,12 +170,25 @@ export function registerAI(r) {
     return json({ items: out }, 200, { 'cache-control': 'no-store' });
   });
 
+  // Speech to text. Nigerian languages go to Spitch when a key is set (it is trained on Nigerian speech);
+  // otherwise, or if Spitch can't read the recording, Whisper on Workers AI.
   r.post('/api/public/transcribe', async (req, env) => {
     await rateLimit(env, `stt:${clientIp(req)}`, 30, 600);
     const buf = await req.arrayBuffer();
     if (!buf.byteLength) fail(400, 'No audio');
     if (buf.byteLength > 6 * 1024 * 1024) fail(413, 'Recording too long — please keep it under a minute');
     const lang = new URL(req.url).searchParams.get('lang');
+    const type = (req.headers.get('content-type') || '').split(';')[0];
+    if (env.SPITCH_API_KEY && ['en', 'yo', 'ig', 'ha'].includes(lang) && /ogg|wav|mpeg|mp3|mp4|m4a|aac/.test(type)) {
+      try {
+        const fd = new FormData();
+        fd.append('language', lang);
+        fd.append('content', new Blob([buf], { type }), `speech.${type.includes('ogg') ? 'ogg' : type.includes('wav') ? 'wav' : type.includes('mp4') || type.includes('m4a') || type.includes('aac') ? 'm4a' : 'mp3'}`);
+        const r = await fetch('https://api.spitch.app/v1/transcriptions', { method: 'POST', headers: { authorization: `Bearer ${env.SPITCH_API_KEY}` }, body: fd });
+        if (r.ok) { const d = await r.json(); if (d?.text) return json({ text: String(d.text).trim(), engine: 'spitch' }); }
+        else console.error('Spitch STT', r.status, (await r.text()).slice(0, 200));
+      } catch (e) { console.error('Spitch STT', e); }
+    }
     let bin = '';
     const bytes = new Uint8Array(buf);
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -183,11 +196,38 @@ export function registerAI(r) {
     if (lang && ['en', 'yo', 'ha'].includes(lang)) input.language = lang; // Whisper supports en/yo/ha; Igbo is auto-detected
     try {
       const res = await env.AI.run(env.STT_MODEL || '@cf/openai/whisper-large-v3-turbo', input);
-      return json({ text: (res?.text || '').trim() });
+      return json({ text: (res?.text || '').trim(), engine: 'whisper' });
     } catch (e) {
       console.error(e);
       fail(502, 'Could not transcribe audio');
     }
+  });
+
+  // Text to speech with Nigerian voices (Spitch). Only available when SPITCH_API_KEY is set; the widget
+  // falls back to the browser's own voices otherwise. Audio is cached at the edge so repeats are free.
+  const VOICES = { en: 'lina', pcm: 'ufoma', yo: 'sade', ig: 'ngozi', ha: 'amina' };
+  r.post('/api/public/speak', async (req, env) => {
+    if (!env.SPITCH_API_KEY) fail(404, 'Natural voice is not set up');
+    await rateLimit(env, `tts:${clientIp(req)}`, 40, 600);
+    const b = await readJson(req, 8 * 1024);
+    const lang = VOICES[b.lang] ? b.lang : 'en';
+    const text = str(b.text, 900);
+    if (!text) fail(400, 'Nothing to say');
+    const s = await getSettings(env);
+    const voice = (s.ai?.voices || {})[lang] || VOICES[lang];
+    const key = new Request(`https://tts.cache/${lang}/${voice}/${await sha256(text)}`);
+    const cached = await caches.default.match(key);
+    if (cached) return new Response(cached.body, { headers: { 'content-type': cached.headers.get('content-type') || 'audio/wav', 'cache-control': 'private, max-age=86400' } });
+    // Spitch speaks en/yo/ig/ha; Pidgin is read with the English model.
+    const r = await fetch('https://api.spitch.app/v1/speech', {
+      method: 'POST', headers: { authorization: `Bearer ${env.SPITCH_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ language: lang === 'pcm' ? 'en' : lang, voice, text }),
+    });
+    if (!r.ok) { console.error('Spitch TTS', r.status, (await r.text()).slice(0, 200)); fail(502, 'Voice is unavailable right now'); }
+    const audio = await r.arrayBuffer();
+    const type = r.headers.get('content-type') || 'audio/wav';
+    await caches.default.put(key, new Response(audio, { headers: { 'content-type': type, 'cache-control': 'public, max-age=604800' } }));
+    return new Response(audio, { headers: { 'content-type': type, 'cache-control': 'private, max-age=86400' } });
   });
 
   // ── CRM AI Sales Assistant ──

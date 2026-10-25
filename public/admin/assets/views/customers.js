@@ -1,15 +1,15 @@
-import { $, $$, api, esc, naira, date, ago, datetime, modal, formHtml, readForm, validate, toast, fail, table, statusPill, STAGES, SEGMENTS, waLink, confirmBox, debounce, fromLocalInput, toLocalInput } from '../lib.js';
+import { $, $$, api, esc, naira, date, ago, datetime, modal, formHtml, readForm, validate, toast, fail, table, statusPill, STAGES, SEGMENTS, waLink, confirmBox, debounce, fromLocalInput, toLocalInput, bindWidgets } from '../lib.js';
 
 export const CUSTOMER_FIELDS = [
   { name: 'name', label: 'Full name', required: true }, { name: 'company', label: 'Company / organisation' },
   { name: 'phone', label: 'Phone', type: 'tel' }, { name: 'whatsapp', label: 'WhatsApp', type: 'tel', hint: 'Leave blank if same as phone' },
   { name: 'email', label: 'Email', type: 'email' }, { name: 'segment', label: 'Segment', type: 'select', options: SEGMENTS },
-  { name: 'address', label: 'Address', full: true }, { name: 'city', label: 'City' }, { name: 'state', label: 'State' },
+  { name: 'address', label: 'Address', type: 'place', full: true, hint: 'Pick the address from the list — it is used later for the installation site and directions.' }, { name: 'city', label: 'City / area' }, { name: 'state', label: 'State' },
   { name: 'stage', label: 'Pipeline stage', type: 'select', options: STAGES.map((s) => [s, s.replace('_', ' ')]) },
   { name: 'status', label: 'Status', type: 'select', options: [['lead', 'Lead'], ['customer', 'Customer'], ['inactive', 'Inactive']] },
   { name: 'source', label: 'Source', type: 'select', options: [['manual', 'Manual entry'], ['referral', 'Referral'], ['walk_in', 'Walk-in'], ['phone', 'Phone call'], ['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['website_quote', 'Website quote'], ['chatbot', 'AI chat'], ['shop', 'Shop'], ['event', 'Event']] },
   { name: 'interest', label: 'Interested in' }, { name: 'value_estimate', label: 'Estimated value (₦)', type: 'number' },
-  { name: 'assigned_to', label: 'Assigned to', type: 'select', options: [] }, { name: 'lat', label: 'Latitude', type: 'number', step: 'any' }, { name: 'lng', label: 'Longitude', type: 'number', step: 'any' },
+  { name: 'assigned_to', label: 'Looked after by', type: 'select', options: [] },
   { name: 'notes', label: 'Notes', type: 'textarea', full: true },
 ];
 
@@ -25,6 +25,13 @@ export async function customerForm(existing, onSaved) {
   const { el, close } = modal({ title: existing ? `Edit ${existing.name}` : 'New customer / lead', size: 'wide',
     body: `<form data-f>${formHtml(fields, existing || { stage: 'new', status: 'lead', segment: 'residential', source: 'manual' })}</form>`,
     footer: `<button class="btn" data-x2>Cancel</button><button class="btn btn-primary" data-save><i class="ri-save-line"></i> Save</button>` });
+  const form = $('[data-f]', el);
+  bindWidgets(form);
+  import('/assets/js/places.js').then(() => form.querySelector('[name=address]').addEventListener('change', () => {
+    const p = form.querySelector('[name=address]')._place; if (!p) return;
+    if (!form.querySelector('[name=city]').value && p.city) form.querySelector('[name=city]').value = p.city;
+    if (!form.querySelector('[name=state]').value && p.state) form.querySelector('[name=state]').value = p.state;
+  }));
   $('[data-x2]', el).onclick = close;
   $('[data-save]', el).onclick = async (e) => {
     const f = $('[data-f]', el); if (!validate(f)) return;

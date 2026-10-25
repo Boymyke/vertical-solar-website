@@ -12,7 +12,8 @@ function honeypot(body) {
 }
 
 // Find an existing contact by phone/email or create a new lead.
-export async function upsertLead(env, { name, phone, email, city, state, segment, interest, source, note, value }) {
+export async function upsertLead(env, { name, phone, email, city, state, segment, interest, source, note, value, address, lat, lng }) {
+  const okLat = Number.isFinite(lat) && Math.abs(lat) <= 90 ? lat : null, okLng = Number.isFinite(lng) && Math.abs(lng) <= 180 ? lng : null;
   const p = normPhone(phone);
   let row = null;
   if (p) row = await env.DB.prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1').bind(p).first();
@@ -22,13 +23,14 @@ export async function upsertLead(env, { name, phone, email, city, state, segment
   if (row) {
     id = row.id;
     await env.DB.prepare(`UPDATE customers SET updated_at = ?, interest = COALESCE(?, interest), city = COALESCE(city, ?),
-        email = COALESCE(email, ?), name = CASE WHEN name = '' OR name IS NULL THEN ? ELSE name END WHERE id = ?`)
-      .bind(now(), interest || null, city || null, email || null, name || 'Website visitor', id).run();
+        email = COALESCE(email, ?), address = COALESCE(address, ?), lat = COALESCE(lat, ?), lng = COALESCE(lng, ?),
+        name = CASE WHEN name = '' OR name IS NULL THEN ? ELSE name END WHERE id = ?`)
+      .bind(now(), interest || null, city || null, email || null, address || null, okLat, okLng, name || 'Website visitor', id).run();
   } else {
     isNew = true;
-    const r = await env.DB.prepare(`INSERT INTO customers (name, phone, whatsapp, email, city, state, segment, interest, source, value_estimate, next_followup_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?, datetime('now', '+1 day')) RETURNING id`)
-      .bind(name || 'Website visitor', p, p, email || null, city || null, state || null, segment || 'residential',
+    const r = await env.DB.prepare(`INSERT INTO customers (name, phone, whatsapp, email, city, state, address, lat, lng, segment, interest, source, value_estimate, next_followup_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now', '+1 day')) RETURNING id`)
+      .bind(name || 'Website visitor', p, p, email || null, city || null, state || null, address || null, okLat, okLng, segment || 'residential',
         interest || null, source || 'website', value || 0).first();
     id = r.id;
     await env.DB.prepare(`INSERT INTO followups (customer_id, type, title, due_at, auto) VALUES (?, 'call', ?, datetime('now', '+2 hours'), 1)`)
@@ -38,7 +40,41 @@ export async function upsertLead(env, { name, phone, email, city, state, segment
   return { id, isNew };
 }
 
+// Location search for address fields (website forms and the CRM). Photon (OpenStreetMap data) is built for
+// search-as-you-type; results are limited to Nigeria and cached at the edge for a day.
+const NG_BBOX = '2.67,4.07,14.68,13.89';
+export async function searchPlaces(q, siteUrl) {
+  const query = String(q || '').trim().slice(0, 120);
+  if (query.length < 3) return [];
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=7&lang=en&bbox=${NG_BBOX}&lat=6.52&lon=3.38`;
+  const cache = caches.default;
+  const key = new Request(url);
+  let res = await cache.match(key);
+  if (!res) {
+    res = await fetch(url, { headers: { 'user-agent': `VerticalSolarWebsite/1.0 (+${siteUrl || 'https://verticalsolar.com.ng'})`, accept: 'application/json' }, cf: { cacheTtl: 86400 } });
+    if (!res.ok) return [];
+    res = new Response(res.body, res);
+    res.headers.set('cache-control', 'public, max-age=86400');
+    await cache.put(key, res.clone());
+  }
+  const data = await res.json().catch(() => ({}));
+  const seen = new Set();
+  return (data.features || []).filter((f) => !f.properties?.countrycode || f.properties.countrycode === 'NG').map((f) => {
+    const p = f.properties || {};
+    const name = p.name || [p.housenumber, p.street].filter(Boolean).join(' ');
+    const area = [p.district || p.locality, p.city || p.county, p.state].filter((x, i, a) => x && x !== name && a.indexOf(x) === i);
+    const [lng, lat] = f.geometry?.coordinates || [];
+    return { label: [name, ...area].filter(Boolean).join(', '), name, sub: area.join(', '), city: p.city || p.county || p.district || '', state: (p.state || '').replace(/ State$/, ''), lat, lng };
+  }).filter((x) => x.label && Number.isFinite(x.lat) && !seen.has(x.label) && seen.add(x.label));
+}
+
 export function registerPublic(r) {
+  r.get('/api/public/places', async (req, env) => {
+    await rateLimit(env, `places:${clientIp(req)}`, 90, 300);
+    const items = await searchPlaces(new URL(req.url).searchParams.get('q'), env.SITE_URL);
+    return json({ items }, 200, { 'cache-control': 'public, max-age=3600' });
+  });
+
   r.get('/api/public/site', async (req, env) => cacheJson(await getPublicSite(env), 30));
 
   r.get('/api/public/projects', async (req, env) => {
@@ -148,10 +184,13 @@ export function registerPublic(r) {
       b.budget && `Budget: ${str(b.budget, 60)}`,
       b.load && `Load calculator: ${str(typeof b.load === 'string' ? b.load : JSON.stringify(b.load), 600)}`,
       b.message && `Message: ${str(b.message, 2000)}`,
+      b.contact_pref && `Prefers: ${str(b.contact_pref, 30)}`,
+      b.place && `Location: ${str(b.place, 200)}${Number.isFinite(+b.lat) && Number.isFinite(+b.lng) && b.lat !== '' ? ` (${(+b.lat).toFixed(5)}, ${(+b.lng).toFixed(5)})` : ''}`,
       b.page && `Page: ${str(b.page, 200)}`,
     ].filter(Boolean).join('\n');
     const { id, isNew } = await upsertLead(env, {
-      name, phone, email, city: str(b.city, 80), state: str(b.state, 80),
+      name, phone, email, city: str(b.city, 80), state: str(b.state, 80), address: str(b.place, 200),
+      lat: b.lat === '' || b.lat == null ? NaN : Number(b.lat), lng: b.lng === '' || b.lng == null ? NaN : Number(b.lng),
       segment: ['residential', 'commercial', 'industrial', 'government'].includes(b.segment) ? b.segment : 'residential',
       interest: str(b.package || b.interest, 120), source: kind === 'chat' ? 'chatbot' : `website_${kind}`, note: details,
     });
