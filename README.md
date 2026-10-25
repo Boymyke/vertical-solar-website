@@ -85,4 +85,4 @@ Edit pages in `site/pages`, not `public/`, then run `npm run build`.
 - Uploads are checked by file signature (JPEG/PNG/WebP/GIF/PDF only), rich text is sanitised.
 - Visitor analytics store no IP addresses and set no cookies; visitors can opt out on the privacy page.
 
-The user manual (website, CRM and field app) is in [`docs/Vertical-Solar-Manual.pdf`](docs/Vertical-Solar-Manual.pdf).
+The user manual (website, CRM and field app) is in [`docs/Vertical-Solar-Manual.pdf`](docs/Vertical-Solar-Manual.pdf). The sales playbook for pitching the platform is in [`docs/Vertical-Solar-Sales-Playbook.pdf`](docs/Vertical-Solar-Sales-Playbook.pdf).
