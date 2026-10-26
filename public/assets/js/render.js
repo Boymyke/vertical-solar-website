@@ -78,11 +78,31 @@ export async function fillBlocks(site) {
   $$('[data-testimonials]').forEach((el) => tasks.push(api('/api/public/testimonials').then((items) => {
     const list = items.slice(0, Number(el.dataset.limit || 99));
     const section = el.closest('[data-testimonials-section]');
-    if (!list.length) { if (section) section.hidden = true; else el.innerHTML = empty('ri-chat-quote-line', 'Verified customer reviews will appear here.'); return; }
+    if (!list.length) {
+      if (section) { section.hidden = true; return; }
+      el.innerHTML = el.dataset.fallback === 'cta'
+        ? `<div class="t-empty"><i class="ri-chat-quote-line" aria-hidden="true"></i><div><strong>Reviews from our customers are being added.</strong><p>Had a system installed by us? We would love to hear how it is going.</p></div><a class="btn btn-accent" href="/contact">Share your experience</a></div>`
+        : empty('ri-chat-quote-line', 'Verified customer reviews will appear here.');
+      return;
+    }
     if (section) section.hidden = false;
     el.innerHTML = list.map(testimonialCard).join('');
     $$('[data-video]', el).forEach((v) => mountVideo(v, v.dataset.video, null, v.dataset.caption));
   }).catch(() => {})));
+  $$('[data-partners]').forEach((el) => {
+    const list = site?.partners || [];
+    if (!list.length) { el.closest('[data-partners-section]')?.setAttribute('hidden', ''); return; }
+    const item = (p) => { const inner = p.logo ? `<img src="${esc(p.logo)}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : `<span class="wordmark">${esc(p.name)}</span>`;
+      return p.url ? `<a class="logo-item" translate="no" href="${esc(p.url)}" target="_blank" rel="noopener nofollow">${inner}</a>` : `<span class="logo-item" translate="no">${inner}</span>`; };
+    const row = list.map(item).join('');
+    // Two copies make the strip loop seamlessly; the second is hidden from screen readers.
+    el.innerHTML = `<div class="marquee-track"><div class="marquee-group">${row}</div><div class="marquee-group" aria-hidden="true">${row}</div></div>`;
+    el.classList.toggle('is-static', list.length < 4);
+  });
+  $$('[data-home-faqs]').forEach((el) => tasks.push(api('/api/public/faqs').then((items) => {
+    const list = items.slice(0, Number(el.dataset.limit || 6));
+    el.innerHTML = list.length ? list.map((f, i) => `<details class="faq-item"${i === 0 ? ' open' : ''}><summary><span>${esc(f.question)}</span><i class="ri-add-line" aria-hidden="true"></i></summary><div class="faq-a">${esc(f.answer).replace(/\n/g, '<br>')}</div></details>`).join('') : empty('ri-question-line', 'Questions and answers are on the way.');
+  }).catch(() => (el.innerHTML = ''))));
   $$('[data-branches]').forEach((el) => { el.innerHTML = (site?.branches || []).map(branchCard).join(''); });
   await Promise.all(tasks);
 }

@@ -51,7 +51,7 @@ export async function profileForm(mount, { onboarding = false, user, onDone } = 
       input.onchange = async () => {
         const f = input.files[0]; if (!f) return;
         b.classList.add('loading');
-        try { const r = await uploadFiles([f], 'staff'); avatar = r.url; $('[data-av]', mount).innerHTML = `<img class="avatar xl" src="${esc(avatar)}" alt="Your photo">`; toast('Photo added'); }
+        try { const r = await uploadFiles([f], 'staff'); avatar = r.url; $('[data-av]', mount).innerHTML = `<img class="avatar xl" src="${esc(avatar)}" alt="Your photo">`; toast('Photo added'); $('[data-photo-err]', mount)?.remove(); $('[data-photo]', mount)?.closest('.card')?.classList.remove('has-error'); }
         catch (ex) { fail(ex); } finally { b.classList.remove('loading'); }
       };
       input.click();
@@ -60,8 +60,12 @@ export async function profileForm(mount, { onboarding = false, user, onDone } = 
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault(); err.hidden = true;
-    if (!owner && !avatar) { err.hidden = false; err.innerHTML = '<i class="ri-camera-line"></i><span>Please add your photo first.</span>'; $('[data-photo]', mount).focus(); return; }
-    if (!validate(form)) return;
+    const photoCard = $('[data-photo]', mount)?.closest('.card');
+    const noPhoto = !owner && !avatar;
+    photoCard?.classList.toggle('has-error', noPhoto);
+    const okFields = validate(form);
+    if (noPhoto) { let m = $('[data-photo-err]', mount); if (!m) photoCard?.querySelector('.card-b')?.insertAdjacentHTML('beforeend', '<span class="field-error" data-photo-err><i class="ri-error-warning-fill" aria-hidden="true"></i> Add a clear photo of your face</span>'); if (okFields) { photoCard?.scrollIntoView({ block: 'center', behavior: 'smooth' }); toast('Add your photo to continue', 'err'); } }
+    if (noPhoto || !okFields) return;
     const fd = new FormData(form);
     const keys = ['date_of_birth', 'gender', 'address', 'state_of_origin', 'marital_status', 'emergency_name', 'emergency_phone', 'emergency_relation', 'branch', 'start_date', 'skills', 'certifications'];
     const btn = $('[type=submit]', form); btn.classList.add('loading');

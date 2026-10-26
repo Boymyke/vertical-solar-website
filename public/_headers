@@ -21,7 +21,7 @@
   Cache-Control: public, max-age=3600
 /tpl/*
   X-Robots-Tag: noindex
-/admin/assets/*
+/staff/assets/*
   Cache-Control: public, max-age=120, must-revalidate
-/admin/sw.js
+/staff/sw.js
   Cache-Control: no-cache

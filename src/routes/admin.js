@@ -7,7 +7,7 @@ import { crud, inflate } from '../lib/crud.js';
 import { getSettings, DEFAULT_SETTINGS } from '../lib/site.js';
 import {
   str, num, bool, now, parseJSON, randomToken, slugify, nextNumber, isoDate, addMonths, sqlDate, isEmail, normPhone,
-  stripHtml, clamp, escapeHtml, naira,
+  stripHtml, clamp, escapeHtml, naira, sha256,
 } from '../lib/util.js';
 
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
@@ -25,6 +25,28 @@ function quoteTotals(items, discount = 0, vatRate = 7.5) {
   const disc = Math.min(Math.max(0, num(discount, 0)), subtotal);
   const vat = Math.round((subtotal - disc) * (num(vatRate, 7.5) / 100) * 100) / 100;
   return { items: clean, subtotal, discount: disc, vat, total: subtotal - disc + vat };
+}
+
+// Job titles offered in the staff dropdown: a sensible starter list, anything the admin added, and titles already in use.
+const DEFAULT_JOB_TITLES = ['Installer', 'Lead installer', 'Site supervisor', 'Electrician', 'Technician', 'Sales representative', 'Customer care', 'Store keeper', 'Driver', 'Marketing', 'Accountant', 'Operations manager'];
+async function jobTitles(env) {
+  const row = await env.DB.prepare("SELECT value FROM settings WHERE key='job_titles'").first();
+  let saved = []; try { saved = JSON.parse(row?.value || '[]'); } catch {}
+  const used = (await env.DB.prepare("SELECT DISTINCT job_title t FROM users WHERE job_title IS NOT NULL AND job_title != ''").all()).results.map((x) => x.t);
+  const out = []; for (const t of [...DEFAULT_JOB_TITLES, ...saved, ...used]) if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  return { all: out, saved };
+}
+async function rememberJobTitle(env, title) {
+  if (!title) return;
+  const { all, saved } = await jobTitles(env);
+  if (all.some((x) => x.toLowerCase() === title.toLowerCase())) return;
+  await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('job_titles', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify([...saved, title].slice(-100))).run();
+}
+// A sign-in link for a new (or reset) staff login. Only a hash is stored; the link stops working once they set a password.
+async function issueInvite(env, userId) {
+  const token = randomToken(24);
+  await env.DB.prepare('UPDATE users SET invite_hash=?, invite_expires=? WHERE id=?').bind(await sha256(token), sqlDate(Date.now() + 7 * 864e5), userId).run();
+  return token;
 }
 
 export function registerAdmin(r) {
@@ -136,6 +158,11 @@ export function registerAdmin(r) {
     return actor.role === 'owner' ? list : list.filter((p) => can(actor, p));
   };
 
+  r.get('/api/admin/job-titles', async (req, env, _p, ctx) => {
+    requirePerm(ctx.user, 'users');
+    return json({ items: (await jobTitles(env)).all });
+  });
+
   r.post('/api/admin/users', async (req, env, _p, ctx) => {
     requirePerm(ctx.user, 'users');
     const b = await readJson(req, 16384);
@@ -149,7 +176,8 @@ export function registerAdmin(r) {
     const u = await env.DB.prepare(`INSERT INTO users (name,email,phone,job_title,role,permissions,password_hash,password_salt,must_change_password,created_by)
       VALUES (?,?,?,?,?,?,?,?,1,?) RETURNING id`).bind(name, email, normPhone(b.phone), str(b.job_title, 80), role, JSON.stringify(perms), hash, salt, ctx.user.id).first();
     await audit(env, req, ctx.user, 'user_created', 'users', u.id, { role, perms });
-    return ok({ id: u.id, temporary_password: temp });
+    await rememberJobTitle(env, str(b.job_title, 80));
+    return ok({ id: u.id, temporary_password: temp, invite_token: await issueInvite(env, u.id) });
   });
 
   r.put('/api/admin/users/:id', async (req, env, { id }, ctx) => {
@@ -167,7 +195,7 @@ export function registerAdmin(r) {
       if (await env.DB.prepare('SELECT id FROM users WHERE email=? AND id!=?').bind(data.email, id).first()) fail(409, 'Another login already uses this email');
     }
     if ('phone' in b) data.phone = normPhone(b.phone);
-    if ('job_title' in b) data.job_title = str(b.job_title, 80);
+    if ('job_title' in b) { data.job_title = str(b.job_title, 80); await rememberJobTitle(env, data.job_title); }
     if ('permissions' in b && target.role !== 'owner') {
       const next = JSON.stringify(sanitizePerms(ctx.user, b.permissions));
       if (next !== target.permissions) data.permissions = next; // only a real change signs them out
@@ -192,7 +220,7 @@ export function registerAdmin(r) {
     await env.DB.prepare('UPDATE users SET password_hash=?, password_salt=?, must_change_password=1, failed_logins=0, locked_until=NULL WHERE id=?').bind(hash, salt, id).run();
     await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
     await audit(env, req, ctx.user, 'password_reset', 'users', id);
-    return ok({ temporary_password: temp });
+    return ok({ temporary_password: temp, invite_token: await issueInvite(env, id) });
   });
 
   r.delete('/api/admin/users/:id', async (req, env, { id }, ctx) => {
@@ -498,7 +526,7 @@ export function registerAdmin(r) {
     const p = await env.DB.prepare('UPDATE products SET stock = stock + ?, updated_at=? WHERE id=? RETURNING id, name, stock, reorder_level').bind(qty, now(), id).first();
     if (!p) fail(404, 'Product not found');
     await env.DB.prepare('INSERT INTO stock_moves (product_id, qty, reason, ref, note, user_id) VALUES (?,?,?,?,?,?)').bind(id, qty, reason, str(b.ref, 80), str(b.note, 300), ctx.user.id).run();
-    if (p.reorder_level > 0 && p.stock <= p.reorder_level) await notify(env, { module: 'inventory', type: 'warning', title: `Low stock: ${p.name}`, body: `${p.stock} left (reorder level ${p.reorder_level})`, link: '/admin/#/inventory' });
+    if (p.reorder_level > 0 && p.stock <= p.reorder_level) await notify(env, { module: 'inventory', type: 'warning', title: `Low stock: ${p.name}`, body: `${p.stock} left (reorder level ${p.reorder_level})`, link: '/staff/#/inventory' });
     return ok({ stock: p.stock });
   });
 
@@ -611,7 +639,7 @@ export function registerAdmin(r) {
       ...ids.map((u) => env.DB.prepare('INSERT INTO installation_staff (installation_id, user_id) VALUES (?,?)').bind(id, u)),
     ]);
     for (const u of ids.filter((x) => !before.includes(x))) {
-      await notify(env, { userId: u, type: 'info', title: 'New job assigned', body: inst?.title, link: '/admin/#/field' });
+      await notify(env, { userId: u, type: 'info', title: 'New job assigned', body: inst?.title, link: '/staff/#/field' });
     }
     return ok();
   });
@@ -621,7 +649,7 @@ export function registerAdmin(r) {
     const b = await readJson(req, 8192);
     await env.DB.prepare('UPDATE work_reports SET reviewed_by=?, reviewed_at=?, review_note=? WHERE id=?').bind(ctx.user.id, now(), str(b.note, 1000), id).run();
     const w = await env.DB.prepare('SELECT user_id FROM work_reports WHERE id=?').bind(id).first();
-    if (w) await notify(env, { userId: w.user_id, type: 'success', title: 'Your work report was reviewed', body: str(b.note, 140), link: '/admin/#/field' });
+    if (w) await notify(env, { userId: w.user_id, type: 'success', title: 'Your work report was reviewed', body: str(b.note, 140), link: '/staff/#/field' });
     return ok();
   });
 
@@ -775,6 +803,9 @@ export function registerAdmin(r) {
   crud(r, { name: 'socials', table: 'socials', perm: 'website', order: 'sort, id', hasUpdatedAt: false,
     fields: { platform: 'str:60', icon: 'str:60', url: 'str:300', active: 'bool', sort: 'int' }, required: ['platform', 'icon', 'url'],
     beforeSave: (d) => { if (d.icon && !/^ri-[a-z0-9-]+$/.test(d.icon)) fail(400, 'Choose an icon from the icon picker'); if (d.url && !/^(https?:|mailto:|tel:)/.test(d.url)) fail(400, 'Link must start with https://'); return d; } });
+  crud(r, { name: 'partners', table: 'partners', perm: 'website', order: 'sort, id', hasUpdatedAt: false,
+    fields: { name: 'str:120', logo: 'str:400', url: 'str:300', active: 'bool', sort: 'int', sample: 'bool' }, required: ['name'],
+    beforeSave: (d) => { if (d.url && !/^https?:/.test(d.url)) fail(400, 'Website must start with https://'); if ('logo' in d || 'name' in d) d.sample = 0; return d; } });
   crud(r, { name: 'popups', table: 'popups', perm: 'website', hasUpdatedAt: false,
     fields: { title: 'str:200', body: 'text:2000', image: 'str:300', cta_text: 'str:60', cta_url: 'str:300', style: 'str:20', pages: 'str:500', trigger: 'str:20', delay_seconds: 'int', frequency: 'str:20', starts_at: 'date', ends_at: 'date', active: 'bool' }, required: ['title'],
     beforeSave: (d) => {

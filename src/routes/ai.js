@@ -32,7 +32,7 @@ async function buildKnowledge(env) {
 }
 
 function systemPrompt(knowledge, settings, lang) {
-  const name = settings.ai.assistant_name || 'Sola';
+  const name = settings.ai.assistant_name || 'Vola';
   return `You are ${name}, the friendly, professional virtual assistant on the website of ${settings.company.name} (Nigeria).
 Only help with topics related to ${settings.company.name}, solar energy, inverters, batteries, power needs, pricing, financing, installation, maintenance and our services. Politely decline unrelated requests.
 Rules:
@@ -89,12 +89,12 @@ export function registerAI(r) {
       const transcript = rows.map((m) => `${m.role === 'user' ? 'Visitor' : 'Bot'}: ${m.content}`).join('\n').slice(0, 1800);
       const { id: cid, isNew } = await upsertLead(env, { name: nameGuess, phone: phoneMatch[0], source: 'chatbot', note: `AI chat lead (chat ${chatId}):\n${transcript}` });
       await env.DB.prepare('UPDATE chats SET customer_id=?, contact_name=?, contact_phone=? WHERE id=?').bind(cid, nameGuess, phoneMatch[0], chatId).run();
-      await notify(env, { module: 'crm', type: 'success', title: `${isNew ? 'New' : 'Returning'} lead from AI chat`, body: `${nameGuess} · ${phoneMatch[0]}`, link: `/admin/#/customers/${cid}` });
+      await notify(env, { module: 'crm', type: 'success', title: `${isNew ? 'New' : 'Returning'} lead from AI chat`, body: `${nameGuess} · ${phoneMatch[0]}`, link: `/staff/#/customers/${cid}` });
     }
 
     if (chat.status === 'human') {
       await env.DB.prepare('UPDATE chats SET messages_count=messages_count+1, updated_at=? WHERE id=?').bind(now(), chatId).run();
-      await notify(env, { module: 'chats', type: 'info', title: 'Visitor replied in live chat', body: message.slice(0, 120), link: `/admin/#/chats/${chatId}` });
+      await notify(env, { module: 'chats', type: 'info', title: 'Visitor replied in live chat', body: message.slice(0, 120), link: `/staff/#/chats/${chatId}` });
       return json({ chat_id: chatId, reply: null, human: true });
     }
 
@@ -127,7 +127,7 @@ export function registerAI(r) {
   // Results are cached in D1, so each string is translated once per language.
   r.post('/api/public/translate', async (req, env) => {
     const b = await readJson(req, 64 * 1024);
-    const lang = ['ig', 'ha', 'yo'].includes(b.lang) ? b.lang : null;
+    const lang = ['ig', 'ha', 'yo', 'pcm'].includes(b.lang) ? b.lang : null;
     if (!lang) fail(400, 'Unsupported language');
     const items = (Array.isArray(b.items) ? b.items : []).slice(0, 60).map((x) => String(x || '').slice(0, 2000));
     if (!items.length) return json({ items: [] });
@@ -148,7 +148,7 @@ export function registerAI(r) {
         try {
           const r = await env.AI.run(env.AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
             messages: [
-              { role: 'system', content: `You translate website text for a Nigerian solar company from English into ${name}. Return ONLY a JSON array of strings, one translation per input, same order and length. Keep any HTML tags, attributes, numbers, prices (₦), brand names (Vertical Solar, Sola, Paystack, WhatsApp), units (kVA, kWh, Wp) and URLs exactly as they are. Use natural, everyday ${name}.` },
+              { role: 'system', content: `You translate website text for a Nigerian solar company from English into ${name}. Return ONLY a JSON array of strings, one translation per input, same order and length. Keep any HTML tags, attributes, numbers, prices (₦), brand names (Vertical Solar, Vola, Paystack, WhatsApp), units (kVA, kWh, Wp) and URLs exactly as they are. Use natural, everyday ${name}.` },
               { role: 'user', content: JSON.stringify(src) }],
             max_tokens: 3000, temperature: 0.2,
           });

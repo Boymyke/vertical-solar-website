@@ -100,7 +100,7 @@ export function registerStaff(r) {
     await env.DB.prepare('UPDATE users SET name=?, phone=?, avatar=?, profile=?, profile_completed_at=?, updated_at=? WHERE id=?')
       .bind(name, phone, avatar, JSON.stringify(profile), complete ? cur.profile_completed_at || now() : null, now(), ctx.user.id).run();
     if (complete && !cur.profile_completed_at && ctx.user.role !== 'owner') {
-      await notify(env, { module: 'users', type: 'info', title: `${name} completed their staff profile`, body: 'Photo, contact and emergency details are now on file.', link: '/admin/#/users' });
+      await notify(env, { module: 'users', type: 'info', title: `${name} completed their staff profile`, body: 'Photo, contact and emergency details are now on file.', link: '/staff/#/users' });
     }
     return ok({ complete: !!complete });
   });
@@ -154,7 +154,7 @@ export function registerStaff(r) {
     }
     await env.DB.batch(stmts);
     const when = dates.length === 1 ? `${dates[0]} at ${start}` : `${dates.length} days from ${dates[0]}, ${start}`;
-    for (const uid of userIds) await notify(env, { userId: uid, type: 'info', title: `You're scheduled at ${inst.title}`, body: `Be on site ${when}.${b.note ? ' ' + str(b.note, 120) : ''}`, link: '/admin/#/field' });
+    for (const uid of userIds) await notify(env, { userId: uid, type: 'info', title: `You're scheduled at ${inst.title}`, body: `Be on site ${when}.${b.note ? ' ' + str(b.note, 120) : ''}`, link: '/staff/#/field' });
     await audit(env, req, ctx.user, 'shifts_created', 'installations', inst.id, { users: userIds.length, dates: dates.length });
     return ok({ created: dates.length * userIds.length });
   });
@@ -168,7 +168,7 @@ export function registerStaff(r) {
     const start = /^\d{2}:\d{2}$/.test(b.start_time || '') ? b.start_time : null;
     if (b.status === 'cancelled') {
       await env.DB.prepare(`UPDATE shifts SET status='cancelled' WHERE id=?`).bind(id).run();
-      await notify(env, { userId: s.user_id, type: 'info', title: `Schedule cancelled: ${s.title}`, body: 'You are no longer expected on this site at that time.', link: '/admin/#/field' });
+      await notify(env, { userId: s.user_id, type: 'info', title: `Schedule cancelled: ${s.title}`, body: 'You are no longer expected on this site at that time.', link: '/staff/#/field' });
       return ok();
     }
     if (date && start) {
@@ -176,7 +176,7 @@ export function registerStaff(r) {
       const end = /^\d{2}:\d{2}$/.test(b.end_time || '') ? lagosToUtc(date, b.end_time) : null;
       await env.DB.prepare(`UPDATE shifts SET starts_at=?, ends_at=?, note=COALESCE(?, note), status=CASE WHEN status IN ('late','missed') THEN 'scheduled' ELSE status END,
         reminded_at=NULL, late_notified_at=NULL, escalated_at=NULL WHERE id=?`).bind(lagosToUtc(date, start), end, str(b.note, 300), id).run();
-      await notify(env, { userId: s.user_id, type: 'info', title: `New time for ${s.title}`, body: `Be on site ${date} at ${start}.`, link: '/admin/#/field' });
+      await notify(env, { userId: s.user_id, type: 'info', title: `New time for ${s.title}`, body: `Be on site ${date} at ${start}.`, link: '/staff/#/field' });
     }
     return ok();
   });
@@ -199,7 +199,7 @@ export function registerStaff(r) {
       .bind(inst?.id ?? null, ctx.user.id, category, urgency, message, JSON.stringify(images), lat, lng).first();
     const type = urgency === 'urgent' ? 'danger' : urgency === 'high' ? 'warning' : 'info';
     await notify(env, { module: 'installations', type, push: true, title: `${urgency === 'urgent' ? 'URGENT: ' : ''}Site issue from ${ctx.user.name}`,
-      body: `${inst ? inst.title + ' · ' : ''}${category}: ${message.slice(0, 110)}${images.length ? ` (${images.length} photo${images.length > 1 ? 's' : ''})` : ''}`, link: `/admin/#/issues/${row.id}` });
+      body: `${inst ? inst.title + ' · ' : ''}${category}: ${message.slice(0, 110)}${images.length ? ` (${images.length} photo${images.length > 1 ? 's' : ''})` : ''}`, link: `/staff/#/issues/${row.id}` });
     return ok({ id: row.id });
   });
 
@@ -219,7 +219,7 @@ export function registerStaff(r) {
     const issue = await env.DB.prepare('SELECT * FROM site_issues WHERE id=?').bind(id).first();
     if (!issue) fail(404, 'Issue not found');
     await env.DB.prepare('UPDATE site_issues SET status=?, response=COALESCE(?, response), handled_by=?, handled_at=? WHERE id=?').bind(st, str(b.response, 1000), ctx.user.id, now(), id).run();
-    await notify(env, { userId: issue.user_id, type: st === 'resolved' ? 'success' : 'info', title: st === 'resolved' ? 'Your site issue was resolved' : 'Your site issue was seen', body: str(b.response, 140) || issue.message.slice(0, 100), link: '/admin/#/field' });
+    await notify(env, { userId: issue.user_id, type: st === 'resolved' ? 'success' : 'info', title: st === 'resolved' ? 'Your site issue was resolved' : 'Your site issue was seen', body: str(b.response, 140) || issue.message.slice(0, 100), link: '/staff/#/field' });
     return ok();
   });
 
@@ -274,19 +274,19 @@ export async function shiftReminders(env) {
   // 1) Starting within the hour.
   for (const s of await due(`SELECT s.id, s.user_id, s.starts_at, i.title FROM shifts s JOIN installations i ON i.id=s.installation_id
       WHERE s.status='scheduled' AND s.reminded_at IS NULL AND s.starts_at > datetime('now') AND s.starts_at <= datetime('now','+60 minutes')`)) {
-    await notify(env, { userId: s.user_id, type: 'info', push: true, title: `Starting soon: ${s.title}`, body: `You're expected on site at ${utcToLagosHm(s.starts_at)}. Clock in when you arrive.`, link: '/admin/#/field' });
+    await notify(env, { userId: s.user_id, type: 'info', push: true, title: `Starting soon: ${s.title}`, body: `You're expected on site at ${utcToLagosHm(s.starts_at)}. Clock in when you arrive.`, link: '/staff/#/field' });
     await env.DB.prepare('UPDATE shifts SET reminded_at=? WHERE id=?').bind(now(), s.id).run();
   }
   // 2) 10+ minutes late and not clocked in → remind the staff member.
   for (const s of await due(`SELECT s.id, s.user_id, s.starts_at, i.title FROM shifts s JOIN installations i ON i.id=s.installation_id
       WHERE s.status='scheduled' AND s.late_notified_at IS NULL AND s.starts_at <= datetime('now','-10 minutes')`)) {
-    await notify(env, { userId: s.user_id, type: 'warning', push: true, title: `You're running late for ${s.title}`, body: `You were due on site at ${utcToLagosHm(s.starts_at)}. Clock in as soon as you arrive, or call your supervisor if you can't make it.`, link: '/admin/#/field' });
+    await notify(env, { userId: s.user_id, type: 'warning', push: true, title: `You're running late for ${s.title}`, body: `You were due on site at ${utcToLagosHm(s.starts_at)}. Clock in as soon as you arrive, or call your supervisor if you can't make it.`, link: '/staff/#/field' });
     await env.DB.prepare(`UPDATE shifts SET status='late', late_notified_at=? WHERE id=?`).bind(now(), s.id).run();
   }
   // 3) 30+ minutes late → tell the admin.
   for (const s of await due(`SELECT s.id, s.starts_at, u.name, i.title FROM shifts s JOIN users u ON u.id=s.user_id JOIN installations i ON i.id=s.installation_id
       WHERE s.status='late' AND s.escalated_at IS NULL AND s.starts_at <= datetime('now','-30 minutes')`)) {
-    await notify(env, { module: 'attendance', type: 'warning', push: true, title: `${s.name} hasn't arrived at ${s.title}`, body: `Due at ${utcToLagosHm(s.starts_at)} — not clocked in yet.`, link: '/admin/#/attendance' });
+    await notify(env, { module: 'attendance', type: 'warning', push: true, title: `${s.name} hasn't arrived at ${s.title}`, body: `Due at ${utcToLagosHm(s.starts_at)} — not clocked in yet.`, link: '/staff/#/attendance' });
     await env.DB.prepare('UPDATE shifts SET escalated_at=? WHERE id=?').bind(now(), s.id).run();
   }
   // 4) Never showed up.

@@ -183,9 +183,23 @@ export function readForm(root, fields) {
   }
   return out;
 }
+// Marks every missing or invalid field in red with a short message under it, and moves to the first one.
+const fieldMessage = (el) => (el.validity.valueMissing ? (el.tagName === 'SELECT' ? 'Choose an option' : 'This is required')
+  : el.validity.typeMismatch ? (el.type === 'email' ? 'Enter a valid email address' : 'Check this value')
+  : el.validity.tooShort ? `Use at least ${el.minLength} characters` : el.validity.rangeOverflow || el.validity.rangeUnderflow ? 'Check this value' : el.validationMessage || 'Check this field');
+export function markField(el, msg) {
+  const field = el.closest('.field') || el.parentElement;
+  el.setAttribute('aria-invalid', 'true'); field?.classList.add('has-error');
+  let m = field?.querySelector(':scope > .field-error');
+  if (!m && field) { m = document.createElement('span'); m.className = 'field-error'; m.id = `err-${Math.random().toString(36).slice(2, 8)}`; field.appendChild(m); el.setAttribute('aria-describedby', m.id); }
+  if (m) m.innerHTML = `<i class="ri-error-warning-fill" aria-hidden="true"></i> ${esc(msg)}`;
+  const clear = () => { if (el.checkValidity()) { el.removeAttribute('aria-invalid'); field?.classList.remove('has-error'); m?.remove(); el.removeEventListener('input', clear); el.removeEventListener('change', clear); } };
+  el.addEventListener('input', clear); el.addEventListener('change', clear);
+}
 export function validate(root) {
-  const bad = [...root.querySelectorAll('input,select,textarea')].find((el) => el.willValidate && !el.checkValidity());
-  if (bad) { bad.reportValidity(); bad.focus(); return false; }
+  const bad = [...root.querySelectorAll('input,select,textarea')].filter((el) => el.willValidate && !el.checkValidity());
+  bad.forEach((el) => markField(el, fieldMessage(el)));
+  if (bad.length) { bad[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); bad[0].focus({ preventScroll: true }); toast(bad.length === 1 ? 'One field needs your attention' : `${bad.length} fields need your attention`, 'err'); return false; }
   return true;
 }
 

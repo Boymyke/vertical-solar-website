@@ -71,7 +71,7 @@ export default async function ({ root, user, can, setTitle }) {
     type: 'line',
     data: { labels: days.map((x) => new Date(x).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })), datasets: [
       { label: 'Visitors', data: days.map((x) => vm[x] || 0), borderColor: '#1E6B3A', backgroundColor: 'rgba(136,210,63,.16)', fill: true, tension: .35, pointRadius: 0, borderWidth: 2, yAxisID: 'y' },
-      { label: 'Leads', data: days.map((x) => lm[x] || 0), borderColor: dark ? '#E5FA37' : '#141716', backgroundColor: dark ? '#E5FA37' : '#141716', tension: .35, pointRadius: 2, borderWidth: 2, yAxisID: 'y1' }] },
+      { label: 'Leads', data: days.map((x) => lm[x] || 0), borderColor: dark ? '#89D041' : '#141716', backgroundColor: dark ? '#89D041' : '#141716', tension: .35, pointRadius: 2, borderWidth: 2, yAxisID: 'y1' }] },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true } } },
       scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 7 } }, y: { beginAtZero: true, grid: { color: dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)' }, ticks: { precision: 0 } }, y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { precision: 0 } } } },
   });

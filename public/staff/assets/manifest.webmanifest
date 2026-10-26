@@ -1,8 +1,8 @@
 {
   "name": "Vertical Solar CRM",
   "short_name": "VS CRM",
-  "start_url": "/admin/#/",
-  "scope": "/admin/",
+  "start_url": "/staff/#/",
+  "scope": "/staff/",
   "display": "standalone",
   "background_color": "#EDF1EB",
   "theme_color": "#144211",

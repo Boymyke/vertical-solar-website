@@ -2,8 +2,8 @@
 
 The public website for **Vertical Solar (Vertical Energy & Networks Ltd)** and the CRM behind it, running as one Cloudflare Worker.
 
-- **Website**: 27 pages, day/night hero (night switches the house lights on), homepage cost estimator, packages and detailed load calculator, projects, shop (switchable), blog, solar care guide, FAQ, three-step quote request with address search, support tickets, English / Igbo / Hausa / Yoruba, accessibility panel, AI assistant "Sola" (expandable, speaks and understands English, Pidgin, Yoruba, Igbo and Hausa).
-- **CRM** at `/admin`: one administrator (the owner), everyone else is staff. Dashboard, customers & pipeline, follow-ups, quotation engine (link + PDF + online acceptance), installations with address search and clock-in zones, staff schedules with "starting soon" / "running late" reminders, staff profiles collected on first sign-in, on-site issue reports, attendance with geofenced clock-in, field app for technicians, inventory, shop orders, support tickets, maintenance & warranties, visitor analytics & heatmaps, chat inbox, AI sales assistant, email, website CMS (pop-up builder, policies, certificates, socials, testimonials, FAQs, packages, branches), blog, staff logins, settings, phone push alerts.
+- **Website**: 27 pages, day/night hero (night switches the house lights on), homepage cost estimator, packages and detailed load calculator, projects, shop (switchable), blog, solar care guide, FAQ, three-step quote request with address search, support tickets, English / Igbo / Hausa / Yoruba, accessibility panel, AI assistant "Vola" (expandable, speaks and understands English, Pidgin, Yoruba, Igbo and Hausa).
+- **CRM** at `/staff`: one administrator (the owner), everyone else is staff. Dashboard, customers & pipeline, follow-ups, quotation engine (link + PDF + online acceptance), installations with address search and clock-in zones, staff schedules with "starting soon" / "running late" reminders, staff profiles collected on first sign-in, on-site issue reports, attendance with geofenced clock-in, field app for technicians, inventory, shop orders, support tickets, maintenance & warranties, visitor analytics & heatmaps, chat inbox, AI sales assistant, email, website CMS (pop-up builder, policies, certificates, socials, testimonials, FAQs, packages, branches), blog, staff logins, settings, phone push alerts.
 
 ## Stack
 
@@ -31,7 +31,7 @@ The D1 database and R2 bucket already exist in the Cloudflare account and the da
    - Root directory: `/`
 3. Deploy. Every push to `main` redeploys automatically.
 4. Worker → **Settings → Domains & Routes** → add `verticalsolar.com.ng` and `www.verticalsolar.com.ng` (the domain's DNS must be on Cloudflare).
-5. Open `/admin` and complete first-time setup with the one-time setup code you were given. The code is deleted once the owner account exists.
+5. Open `/staff` and complete first-time setup with the one-time setup code you were given. The code is deleted once the owner account exists.
 
 ### Optional secrets
 
@@ -42,7 +42,7 @@ Worker → **Settings → Variables and Secrets** → add as *Secret*:
 | `RESEND_API_KEY` | Sending email from the CRM and the daily digest ([resend.com](https://resend.com)) |
 | `PAYSTACK_SECRET_KEY` | Verifying online card payments in the shop ([paystack.com](https://paystack.com)) |
 | `TURNSTILE_SECRET` | Spam protection on forms (pair with the site key in CRM → Settings → Integrations) |
-| `SPITCH_API_KEY` | Natural Nigerian voices (English, Yoruba, Igbo, Hausa) and Nigerian-language voice input for Sola ([spitch.app](https://spitch.app)). Without it the browser's own voices are used |
+| `SPITCH_API_KEY` | Natural Nigerian voices (English, Yoruba, Igbo, Hausa) and Nigerian-language voice input for Vola ([spitch.app](https://spitch.app)). Without it the browser's own voices are used |
 | `SETUP_KEY` | Alternative setup code, only needed if the one-time code is lost before setup |
 
 Never paste secret keys into the CRM — only public keys (Paystack `pk_…`, Turnstile site key) go there.
@@ -68,7 +68,7 @@ node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('wrangler.jso
 site/pages/        page sources (front-matter + body) → built into public/
 site/partials/     header and footer
 public/            built website, assets, admin app (served as static assets)
-public/admin/      CRM single-page app (views in assets/views/)
+public/staff/      CRM single-page app (views in assets/views/)
 src/index.js       Worker entry, routing, security headers
 src/routes/        public, auth, admin, field, analytics, ai, seo
 src/lib/           http, auth/permissions, settings, generic CRUD, utilities

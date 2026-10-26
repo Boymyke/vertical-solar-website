@@ -1,5 +1,5 @@
 // CRM shell: sign-in, first-time profile, permission-aware navigation, routing, notifications and push alerts.
-import { $, $$, api, esc, initials, toast, ago, modal, debounce, skeleton } from './lib.js';
+import { $, $$, api, esc, initials, toast, ago, modal, debounce, skeleton, validate, markField } from './lib.js';
 
 const V = '2';
 const NAV = [
@@ -36,6 +36,25 @@ const VIEWS = {
   chats: 'chats', ai: 'ai', website: 'website', blog: 'blog', email: 'email', users: 'users', settings: 'settings', profile: 'profile', notifications: 'notifications',
 };
 
+// Every password box gets an eye button to show or hide what was typed.
+function enhancePasswords(root = document) {
+  root.querySelectorAll('input[type="password"]:not([data-eye])').forEach((inp) => {
+    inp.dataset.eye = '1';
+    const wrap = document.createElement('span'); wrap.className = 'pw-wrap';
+    inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pw-eye'; b.setAttribute('aria-label', 'Show password'); b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = '<i class="ri-eye-line" aria-hidden="true"></i>';
+    b.addEventListener('click', () => {
+      const show = inp.type === 'password'; inp.type = show ? 'text' : 'password';
+      b.setAttribute('aria-pressed', String(show)); b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      b.innerHTML = `<i class="${show ? 'ri-eye-off-line' : 'ri-eye-line'}" aria-hidden="true"></i>`; inp.focus();
+    });
+    wrap.appendChild(b);
+  });
+}
+new MutationObserver(() => enhancePasswords()).observe(document.documentElement, { childList: true, subtree: true });
+
 export const state = { user: null, logo: '' };
 export const isOwner = () => state.user?.role === 'owner';
 export const can = (...p) => state.user && (isOwner() || p.some((x) => state.user.permissions.includes(x)));
@@ -55,18 +74,18 @@ async function authScreen(kind) {
   const pwHint = '<span class="hint">At least 10 characters, with upper and lower case letters and a number.</span>';
   const forms = {
     login: `<h1>Welcome back</h1><p class="muted" style="margin:0 0 24px">Sign in with your work email and password.</p>
-      <form class="stack" data-login><div class="field"><label for="em">Work email</label><input class="input" id="em" name="email" type="email" required autocomplete="username"></div>
+      <form class="stack" data-login novalidate><div class="field"><label for="em">Work email</label><input class="input" id="em" name="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="pw">Password</label><input class="input" id="pw" name="password" type="password" required autocomplete="current-password"></div>
       <div class="alert err" hidden data-err></div><button class="btn btn-primary btn-lg" type="submit">Sign in</button>
       <p class="muted small" style="margin:0">Forgot your password? Ask the administrator to reset it from Staff logins.</p></form>`,
     setup: `<h1>Set up your CRM</h1><p class="muted" style="margin:0 0 24px">Create the administrator account. You'll need the one-time setup code you were given.</p>
-      <form class="stack" data-setup><div class="field"><label for="sc">Setup code</label><input class="input" id="sc" name="setup_code" required autocomplete="one-time-code"></div>
+      <form class="stack" data-setup novalidate><div class="field"><label for="sc">Setup code</label><input class="input" id="sc" name="setup_code" required autocomplete="one-time-code"></div>
       <div class="field"><label for="nm">Your full name</label><input class="input" id="nm" name="name" required autocomplete="name"></div>
       <div class="field"><label for="em">Work email</label><input class="input" id="em" name="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="pw">Password</label><input class="input" id="pw" name="password" type="password" required minlength="10" autocomplete="new-password">${pwHint}</div>
       <div class="alert err" hidden data-err></div><button class="btn btn-primary btn-lg" type="submit">Create administrator account</button></form>`,
     'change-password': `<h1>Choose your password</h1><p class="muted" style="margin:0 0 24px">Replace the temporary password you were given with one only you know.</p>
-      <form class="stack" data-change><div class="field"><label for="cur">Temporary password</label><input class="input" id="cur" name="current" type="password" required autocomplete="current-password"></div>
+      <form class="stack" data-change novalidate><div class="field"><label for="cur">Temporary password</label><input class="input" id="cur" name="current" type="password" required autocomplete="current-password"></div>
       <div class="field"><label for="pw">New password</label><input class="input" id="pw" name="password" type="password" required minlength="10" autocomplete="new-password">${pwHint}</div>
       <div class="alert err" hidden data-err></div><button class="btn btn-primary btn-lg" type="submit">Save password</button></form>`,
   };
@@ -75,6 +94,7 @@ async function authScreen(kind) {
   const form = $('form', root), err = $('[data-err]', root);
   form.addEventListener('submit', async (e) => {
     e.preventDefault(); err.hidden = true;
+    if (!validate(form)) return;
     const btn = $('[type=submit]', form); btn.classList.add('loading');
     const body = Object.fromEntries(new FormData(form).entries());
     try {
@@ -83,6 +103,36 @@ async function authScreen(kind) {
       if (kind === 'change-password') { await api('/api/auth/password', { body }); toast('Password saved'); state.user = null; location.hash = '#/'; }
       route();
     } catch (ex) { err.hidden = false; err.textContent = ex.message; } finally { btn.classList.remove('loading'); }
+  });
+}
+
+/* ── Sign-in link from the administrator: choose a password and go straight in ── */
+async function welcomeScreen(token) {
+  const logo = await logoSvg();
+  const root = $('#root');
+  const shell = (inner) => `<div class="auth"><aside class="auth-side">${logo}<div><h2>Welcome to the Vertical Solar team app.</h2><p style="max-width:40ch">Your schedule, job sites, clock-in and reports — all on your phone.</p></div><small style="opacity:.75">Secure area · Authorised staff only</small></aside><main class="auth-main"><div class="auth-card">${inner}</div></main></div>`;
+  root.innerHTML = shell(skeleton('list'));
+  let who;
+  try { who = await api('/api/auth/invite', { body: { token } }); }
+  catch (e) {
+    root.innerHTML = shell(`<h1>Link not valid</h1><div class="alert warn" style="margin:12px 0 20px"><i class="ri-time-line"></i><span>${esc(e.message)}</span></div><a class="btn btn-primary btn-lg" href="#/login">Go to sign in</a>`);
+    return;
+  }
+  root.innerHTML = shell(`<h1>Welcome, ${esc(who.name.split(' ')[0])}</h1><p class="muted" style="margin:0 0 20px">Choose a password for <strong>${esc(who.email)}</strong>. You will use it with this email to sign in from now on.</p>
+    <form class="stack" data-welcome novalidate><input type="email" name="email" value="${esc(who.email)}" autocomplete="username" hidden>
+      <div class="field"><label for="pw">New password</label><input class="input" id="pw" name="password" type="password" required minlength="10" autocomplete="new-password"><span class="hint">At least 10 characters, with upper and lower case letters and a number.</span></div>
+      <div class="field"><label for="pw2">Type it again</label><input class="input" id="pw2" name="password2" type="password" required minlength="10" autocomplete="new-password"></div>
+      <div class="alert err" hidden data-err></div><button class="btn btn-primary btn-lg" type="submit">Save password and continue</button></form>`);
+  const form = $('[data-welcome]', root), err = $('[data-err]', root);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); err.hidden = true;
+    if (!validate(form)) return;
+    const pw = form.password.value;
+    if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw) || !/\d/.test(pw)) { markField(form.password, 'Use upper and lower case letters and a number'); return; }
+    if (pw !== form.password2.value) { markField(form.password2, 'The two passwords are not the same'); return; }
+    const btn = $('[type=submit]', form); btn.classList.add('loading');
+    try { await api('/api/auth/invite/accept', { body: { token, password: pw } }); toast('Password saved — welcome!'); state.user = null; history.replaceState(null, '', '#/'); route(); }
+    catch (ex) { err.hidden = false; err.textContent = ex.message; } finally { btn.classList.remove('loading'); }
   });
 }
 
@@ -164,7 +214,7 @@ export function setTitle(title, sub = '', actions = '') {
 /* ── Notifications ── */
 let lastNotifId = 0, notifs = [];
 const NI = { success: ['ri-checkbox-circle-line', 'var(--ok-bg)', 'var(--ok)'], warning: ['ri-alert-line', 'var(--warn-bg)', 'var(--warn)'], danger: ['ri-alarm-warning-line', 'var(--bad-bg)', 'var(--bad)'], info: ['ri-information-line', 'var(--info-bg)', 'var(--info)'] };
-export const notifHtml = (n) => { const [ic, bg, fg] = NI[n.type] || NI.info; const href = (n.link || '#/').replace('/admin/', ''); return `<div class="notif ${n.read ? '' : 'unread'}" data-nid="${n.id}"><i class="${ic}" style="background:${bg};color:${fg}" aria-hidden="true"></i><a href="${esc(href)}" data-open><strong>${esc(n.title)}</strong>${n.body ? `<span>${esc(n.body)}</span><br>` : ''}<span>${ago(n.created_at)}</span></a><button class="x" type="button" data-dismiss aria-label="Close this notification" title="Close"><i class="ri-close-line"></i></button></div>`; };
+export const notifHtml = (n) => { const [ic, bg, fg] = NI[n.type] || NI.info; const href = (n.link || '#/').replace(/^\/(?:staff|admin)\//, ''); return `<div class="notif ${n.read ? '' : 'unread'}" data-nid="${n.id}"><i class="${ic}" style="background:${bg};color:${fg}" aria-hidden="true"></i><a href="${esc(href)}" data-open><strong>${esc(n.title)}</strong>${n.body ? `<span>${esc(n.body)}</span><br>` : ''}<span>${ago(n.created_at)}</span></a><button class="x" type="button" data-dismiss aria-label="Close this notification" title="Close"><i class="ri-close-line"></i></button></div>`; };
 async function pollNotifs() {
   try {
     const r = await api('/api/admin/notifications');
@@ -216,7 +266,7 @@ const b64ToBytes = (s) => { const p = '='.repeat((4 - (s.length % 4)) % 4); cons
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
-    const reg = await navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' });
+    const reg = await navigator.serviceWorker.register('/staff/sw.js', { scope: '/staff/' });
     if (Notification.permission === 'granted') await enablePush(false, reg);
     else if (Notification.permission === 'default') $('[data-push-card]')?.removeAttribute('hidden');
   } catch (e) { console.warn('push setup', e); }
@@ -225,7 +275,7 @@ export async function enablePush(ask, reg) {
   try {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) { if (ask) toast('This browser cannot show alerts. On iPhone, add the app to your Home Screen first.', 'err'); return false; }
     if (ask && Notification.permission !== 'granted') { const p = await Notification.requestPermission(); if (p !== 'granted') { toast('Alerts stay off. You can turn them on later from your profile.', 'err'); return false; } }
-    reg = reg || (await navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' }));
+    reg = reg || (await navigator.serviceWorker.register('/staff/sw.js', { scope: '/staff/' }));
     await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) { const { key } = await api('/api/admin/push/key'); sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) }); }
@@ -262,6 +312,7 @@ async function route() {
   const hash = location.hash.replace(/^#\/?/, '');
   const [name, ...params] = hash.split('?')[0].split('/');
   if (['login', 'setup'].includes(name)) return authScreen(name);
+  if (name === 'welcome' && params[0]) return welcomeScreen(params[0]);
   if (!state.user) {
     try { state.user = await api('/api/auth/me'); }
     catch { return authScreen('login'); }

@@ -93,6 +93,7 @@ function page(file) {
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/assets/fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+${fm.hero ? '<link rel="preload" as="image" type="image/webp" imagesrcset="/images/hero/home-day-768.webp 768w, /images/hero/home-day-1280.webp 1280w, /images/hero/home-day-1920.webp 1920w, /images/hero/home-day-3072.webp 3072w" imagesizes="(max-aspect-ratio: 3/2) 150svh, 100vw" fetchpriority="high">' : ''}
 <link rel="stylesheet" href="/assets/vendor/remixicon/remixicon.css">
 <link rel="stylesheet" href="/assets/css/site.css?v=${Date.now().toString(36)}">
 ${(fm.css || []).map((c) => `<link rel="stylesheet" href="${c}">`).join('\n')}

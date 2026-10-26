@@ -8,6 +8,7 @@
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let uid = 0;
+const PREC = { building: 'Building', house: 'House no.', street: 'Street', area: 'Area' };
 
 export function attachPlace(input, { onPick, onClear, endpoint = '/api/public/places' } = {}) {
   if (!input || input.dataset.placeReady) return;
@@ -28,14 +29,18 @@ export function attachPlace(input, { onPick, onClear, endpoint = '/api/public/pl
   const open = (v) => { list.hidden = !v; input.setAttribute('aria-expanded', String(v)); };
   const mark = (ok) => {
     status.hidden = !ok;
-    status.innerHTML = ok ? '<i class="ri-checkbox-circle-fill" aria-hidden="true"></i> Location confirmed' : '';
+    const pr = input._place?.precision;
+    status.innerHTML = !ok ? '' : pr === 'street' || pr === 'area'
+      ? `<i class="ri-information-fill" aria-hidden="true"></i> ${pr === 'street' ? 'Street confirmed' : 'Area confirmed'} — add the house number or building name at the start, e.g. “No. 4, Green Court, …”`
+      : '<i class="ri-checkbox-circle-fill" aria-hidden="true"></i> Address confirmed';
+    status.classList.toggle('partial', ok && (pr === 'street' || pr === 'area'));
     input.dataset.placeVerified = ok ? '1' : '';
   };
   if (picked) mark(true);
 
   const draw = (msg) => {
     if (msg) { list.innerHTML = `<li aria-disabled="true" style="cursor:default"><i class="ri-search-line" aria-hidden="true"></i><span>${esc(msg)}</span></li>`; open(true); return; }
-    list.innerHTML = items.map((p, i) => `<li role="option" id="${id}-${i}" aria-selected="${i === active}" data-i="${i}"><i class="ri-map-pin-2-line" aria-hidden="true"></i><span>${esc(p.name || p.label)}${p.sub ? `<small>${esc(p.sub)}</small>` : ''}</span></li>`).join('');
+    list.innerHTML = items.map((p, i) => `<li role="option" id="${id}-${i}" aria-selected="${i === active}" data-i="${i}"><i class="${p.precision === 'building' || p.precision === 'house' ? 'ri-building-2-line' : p.precision === 'street' ? 'ri-road-map-line' : 'ri-map-pin-2-line'}" aria-hidden="true"></i><span>${esc(p.name || p.label)}${p.sub ? `<small>${esc(p.sub)}</small>` : ''}</span><em class="place-prec">${PREC[p.precision] || ''}</em></li>`).join('');
     input.setAttribute('aria-activedescendant', active >= 0 ? `${id}-${active}` : '');
     open(items.length > 0);
   };
@@ -54,11 +59,15 @@ export function attachPlace(input, { onPick, onClear, endpoint = '/api/public/pl
       const d = r.ok ? await r.json() : { items: [] };
       if (my !== seq) return;
       items = d.items || []; active = -1;
-      if (!items.length) draw('No match yet — try adding the city, e.g. "Ikeja, Lagos"'); else draw();
+      if (!items.length) draw('No match yet — type the street and area, e.g. "4 Allen Avenue, Ikeja"'); else draw();
     } catch { if (my === seq) draw('Could not search right now. You can still type the address.'); }
   };
 
   input.addEventListener('input', () => {
+    // Adding a house number or building name to a confirmed street keeps it confirmed.
+    if (picked && input.value !== picked && input._place && input.value.includes(input._place.label) && input.value.length > input._place.label.length) {
+      picked = input.value; input._place = { ...input._place, label: input.value, precision: 'house' }; mark(true); return;
+    }
     if (picked && input.value !== picked) { picked = null; mark(false); onClear?.(); }
     clearTimeout(timer); timer = setTimeout(search, 280);
   });

@@ -11,7 +11,7 @@ self.addEventListener('push', (event) => {
       if (r.ok) item = (await r.json()).item;
     } catch {}
     const title = item?.title || 'Vertical Solar';
-    const link = (item?.link || '/admin/#/').startsWith('/admin') ? item?.link || '/admin/#/' : `/admin/${(item?.link || '#/').replace(/^\/?/, '')}`;
+    const link = /^\/(staff|admin)/.test(item?.link || '') ? item.link.replace(/^\/admin/, '/staff') : `/staff/${(item?.link || '#/').replace(/^\/?/, '')}`;
     await self.registration.showNotification(title, {
       body: item?.body || 'You have a new update. Tap to open.',
       icon: '/assets/img/icon-192.png', badge: '/assets/img/favicon-32.png',
@@ -24,10 +24,10 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.link || '/admin/#/', self.location.origin).href;
+  const url = new URL(event.notification.data?.link || '/staff/#/', self.location.origin).href;
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const open = all.find((c) => c.url.includes('/admin'));
+    const open = all.find((c) => c.url.includes('/staff'));
     if (open) { await open.focus(); return open.navigate(url).catch(() => {}); }
     return self.clients.openWindow(url);
   })());

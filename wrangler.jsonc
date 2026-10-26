@@ -31,7 +31,9 @@
       "/robots.txt",
       "/admin",
       "/admin/*",
-      "!/admin/assets/*"
+      "/staff",
+      "/staff/*",
+      "!/staff/assets/*"
     ]
   },
 

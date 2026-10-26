@@ -1,4 +1,4 @@
-// Whole-site translation: English (source), Igbo, Hausa, Yoruba.
+// Whole-site translation: English (source), Nigerian Pidgin, Igbo, Hausa, Yoruba.
 //
 // Every visible string on the page — static copy, content loaded from the CRM, messages written by
 // scripts — is looked up by its English text in /assets/i18n/<lang>.json. Blocks that contain inline
@@ -9,7 +9,7 @@
 // Add a language: create /assets/i18n/<code>.json and add it to LANGS.
 import { $$ } from './core.js';
 
-export const LANGS = { en: 'English', ig: 'Igbo', ha: 'Hausa', yo: 'Yorùbá' };
+export const LANGS = { en: 'English', pcm: 'Pidgin', ig: 'Igbo', ha: 'Hausa', yo: 'Yorùbá' };
 
 const INLINE = new Set(['A', 'STRONG', 'EM', 'B', 'I', 'BR', 'SPAN', 'SMALL', 'ABBR', 'SUP', 'SUB', 'KBD', 'MARK', 'TIME', 'U', 'S', 'Q', 'CITE', 'DFN', 'WBR', 'BDI']);
 const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'TEXTAREA', 'CODE', 'PRE', 'TEMPLATE', 'IFRAME', 'CANVAS', 'VIDEO', 'AUDIO', 'MATH']);
@@ -59,8 +59,9 @@ function isBlock(el) {
 const reverse = {}; // lang -> Set of translated strings (so we never try to translate a translation)
 function lookup(dict, key) {
   if (!key || !LETTER.test(key)) return null;
-  if (reverse[current]?.has(key)) return null;
+  // A dictionary entry wins, even when the translation is the same as the English (names, brands, Pidgin).
   if (dict[key] != null) return dict[key];
+  if (reverse[current]?.has(key)) return null;
   if (/\d/.test(key)) {
     const { k, nums } = template(key);
     const v = dict[k];
@@ -151,7 +152,7 @@ function restore() {
 async function load(code) {
   if (code === 'en') return {};
   if (!dicts[code]) {
-    dicts[code] = fetch(`/assets/i18n/${code}.json?v=5`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
+    dicts[code] = fetch(`/assets/i18n/${code}.json?v=6`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
       try { Object.assign(d, JSON.parse(localStorage.getItem(`vs-mt-${code}`) || '{}')); } catch {}
       return d;
     });
@@ -197,6 +198,7 @@ export async function applyLang(code) {
     const tv = lookup(dict, escapeHtml(norm(document.__vsTitle))); if (tv) document.title = decode(tv);
   } else if (document.__vsTitle) document.title = document.__vsTitle;
   observe();
+  document.documentElement.classList.remove('i18n-wait');
   window.dispatchEvent(new CustomEvent('vs:lang', { detail: code }));
 }
 
@@ -234,7 +236,7 @@ export function initI18n() {
     s.addEventListener('change', () => applyLang(s.value));
   });
   if (saved !== 'en' && LANGS[saved]) applyLang(saved);
-  else document.documentElement.setAttribute('lang', 'en');
+  else { document.documentElement.setAttribute('lang', 'en'); document.documentElement.classList.remove('i18n-wait'); }
 }
 
 export const currentLang = () => current;

@@ -62,6 +62,8 @@ function render() {
 }
 
 export function initCart(shopEnabled) {
+  document.documentElement.dataset.shop = shopEnabled ? 'on' : 'off';
+  try { localStorage.setItem('vs-shop', shopEnabled ? 'on' : 'off'); } catch {}
   $$('[data-shop-link]').forEach((el) => (el.hidden = !shopEnabled));
   render();
   document.addEventListener('click', (e) => {

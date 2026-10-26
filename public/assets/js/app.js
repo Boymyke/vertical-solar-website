@@ -6,6 +6,7 @@ import { initTracking, trackEvent } from './track.js';
 import { initCart } from './cart.js';
 import { initChat } from './chat.js';
 import { mountVideo } from './media.js';
+import { initMotion } from './motion.js';
 export { mountVideo };
 
 const html = document.documentElement;
@@ -14,8 +15,13 @@ const html = document.documentElement;
 function initTheme() {
   const btns = $$('[data-set-theme]');
   const sync = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.setTheme === html.dataset.theme)));
-  btns.forEach((b) => b.addEventListener('click', () => {
+  // The hero's night photo is decoded before switching, so the lights fade on smoothly instead of popping in.
+  const nightImg = $('[data-night-img]');
+  const ready = () => (!nightImg || (nightImg.complete && nightImg.naturalWidth) ? Promise.resolve() : Promise.race([nightImg.decode().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]));
+  if (nightImg) (window.requestIdleCallback || setTimeout)(() => nightImg.decode?.().catch(() => {}));
+  btns.forEach((b) => b.addEventListener('click', async () => {
     const next = b.dataset.setTheme;
+    if (next === 'night') await ready();
     html.dataset.themeMode = next;
     html.dataset.theme = next;
     try { localStorage.setItem('vs-theme', next); } catch {}
@@ -217,6 +223,24 @@ function initMedia() {
     });
   });
   $$('[data-video]').forEach((el) => mountVideo(el, el.dataset.video, el.dataset.poster, el.dataset.caption));
+  // Project photo carousel: one big photo, swipe or use the arrows/thumbnails to move.
+  $$('[data-carousel]').forEach((box) => {
+    const track = $('[data-track]', box), slides = $$('.pgal-slide', box), thumbs = $$('[data-go]', box), label = $('[data-count-label]', box);
+    if (!track || slides.length < 2) return;
+    let cur = 0;
+    const go = (i) => { cur = (i + slides.length) % slides.length; track.scrollTo({ left: slides[cur].offsetLeft - track.offsetLeft, behavior: 'smooth' }); };
+    const sync = () => {
+      const i = Math.round(track.scrollLeft / track.clientWidth);
+      if (i === cur && label?.textContent.startsWith(`${i + 1} `)) return;
+      cur = i; if (label) label.textContent = `${i + 1} / ${slides.length}`;
+      thumbs.forEach((t, k) => { t.toggleAttribute('aria-current', k === i); if (k === i) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+    };
+    track.addEventListener('scroll', () => requestAnimationFrame(sync), { passive: true });
+    $('[data-prev]', box)?.addEventListener('click', () => go(cur - 1));
+    $('[data-next]', box)?.addEventListener('click', () => go(cur + 1));
+    thumbs.forEach((t) => t.addEventListener('click', () => go(Number(t.dataset.go))));
+    track.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') { e.preventDefault(); go(cur + 1); } if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); } });
+  });
 }
 
 /* ── Small UI behaviours ── */
@@ -261,6 +285,7 @@ function initMisc() {
 }
 
 async function boot() {
+  initMotion();
   initTheme();
   initNav();
   initI18n();
@@ -271,7 +296,7 @@ async function boot() {
   initTracking();
   const site = await getSite();
   renderSite(site);
-  initCart(site ? site.shop.enabled : true);
+  initCart(site ? !!site.shop.enabled : document.documentElement.dataset.shop === 'on');
   initChat();
   initConsent(site);
   initPopups(site);

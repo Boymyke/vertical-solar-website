@@ -53,7 +53,7 @@ export function registerField(r) {
     const distance = Math.round(haversine(lat, lng, site.lat, site.lng));
     const allowed = site.radius_m + Math.min(accuracy, GPS_SLACK_MAX);
     if (distance > allowed) {
-      await notify(env, { module: 'attendance', type: 'warning', title: `Clock-in blocked: ${ctx.user.name}`, body: `${distance}m from ${site.title} (allowed ${site.radius_m}m)`, link: '/admin/#/attendance' });
+      await notify(env, { module: 'attendance', type: 'warning', title: `Clock-in blocked: ${ctx.user.name}`, body: `${distance}m from ${site.title} (allowed ${site.radius_m}m)`, link: '/staff/#/attendance' });
       fail(403, `You are about ${distance >= 1000 ? (distance / 1000).toFixed(1) + 'km' : distance + 'm'} from ${site.title}. You must be on site (within ${site.radius_m}m) to clock in.`, { distance });
     }
     const row = await env.DB.prepare(`INSERT INTO attendance (user_id, installation_id, clock_in_at, in_lat, in_lng, in_accuracy, in_distance, last_ping_at, last_lat, last_lng, last_distance)
@@ -62,7 +62,7 @@ export function registerField(r) {
     if (site.status === 'scheduled') await env.DB.prepare(`UPDATE installations SET status='in_progress', updated_at=? WHERE id=?`).bind(now(), site.id).run();
     const arrival = await markArrival(env, ctx.user.id, site.id, row.id);
     const lateTxt = arrival && arrival.late > 10 ? ` · ${arrival.late} min late` : arrival ? ' · on time' : '';
-    await notify(env, { module: 'attendance', type: arrival && arrival.late > 10 ? 'warning' : 'success', title: `${ctx.user.name} clocked in`, body: `${site.title} · ${distance}m from site centre${lateTxt}`, link: '/admin/#/attendance' });
+    await notify(env, { module: 'attendance', type: arrival && arrival.late > 10 ? 'warning' : 'success', title: `${ctx.user.name} clocked in`, body: `${site.title} · ${distance}m from site centre${lateTxt}`, link: '/staff/#/attendance' });
     return ok({ id: row.id, distance, late: arrival?.late ?? null });
   });
 
@@ -81,13 +81,13 @@ export function registerField(r) {
     if (!inside && !a.offsite) {
       updates.offsite = 1;
       updates.offsite_since = now();
-      await notify(env, { module: 'attendance', type: 'danger', title: `${ctx.user.name} left the job site`, body: `${a.site} · now ~${distance >= 1000 ? (distance / 1000).toFixed(1) + 'km' : distance + 'm'} away`, link: '/admin/#/attendance' });
+      await notify(env, { module: 'attendance', type: 'danger', title: `${ctx.user.name} left the job site`, body: `${a.site} · now ~${distance >= 1000 ? (distance / 1000).toFixed(1) + 'km' : distance + 'm'} away`, link: '/staff/#/attendance' });
     } else if (inside && a.offsite) {
       const mins = a.offsite_since ? (Date.now() - new Date(a.offsite_since.replace(' ', 'T') + 'Z').getTime()) / 60000 : 0;
       updates.offsite = 0;
       updates.offsite_since = null;
       updates.offsite_minutes = Math.round((a.offsite_minutes + mins) * 10) / 10;
-      await notify(env, { module: 'attendance', type: 'info', title: `${ctx.user.name} is back on site`, body: `${a.site} · away ${Math.round(mins)} min`, link: '/admin/#/attendance' });
+      await notify(env, { module: 'attendance', type: 'info', title: `${ctx.user.name} is back on site`, body: `${a.site} · away ${Math.round(mins)} min`, link: '/staff/#/attendance' });
     }
     const keys = Object.keys(updates);
     await env.DB.prepare(`UPDATE attendance SET ${keys.map((k) => k + '=?').join(',')} WHERE id=?`).bind(...keys.map((k) => updates[k]), a.id).run();
@@ -107,7 +107,7 @@ export function registerField(r) {
     await env.DB.prepare(`UPDATE attendance SET status='closed', clock_out_at=?, out_lat=?, out_lng=?, out_accuracy=?, out_distance=?, offsite=0, offsite_minutes=?, note=? WHERE id=?`)
       .bind(now(), lat, lng, accuracy, distance, Math.round(offMins * 10) / 10, [a.note, str(b.note, 500), away ? `Clocked out ${distance}m from site` : null].filter(Boolean).join(' · ') || null, a.id).run();
     const hours = ((Date.now() - new Date(a.clock_in_at.replace(' ', 'T') + 'Z').getTime()) / 3600000).toFixed(1);
-    await notify(env, { module: 'attendance', type: away ? 'warning' : 'info', title: `${ctx.user.name} clocked out`, body: `${a.site} · ${hours}h on shift${away ? ` · ${distance}m away from site` : ''}`, link: '/admin/#/attendance' });
+    await notify(env, { module: 'attendance', type: away ? 'warning' : 'info', title: `${ctx.user.name} clocked out`, body: `${a.site} · ${hours}h on shift${away ? ` · ${distance}m away from site` : ''}`, link: '/staff/#/attendance' });
     return ok({ hours: Number(hours) });
   });
 
@@ -127,7 +127,7 @@ export function registerField(r) {
     await env.DB.prepare('INSERT INTO work_reports (installation_id, user_id, attendance_id, message, images, progress, lat, lng) VALUES (?,?,?,?,?,?,?,?)')
       .bind(site.id, ctx.user.id, open?.id ?? null, message, JSON.stringify(images), progress, num(form.get('lat'), null), num(form.get('lng'), null)).run();
     if (progress != null) await env.DB.prepare('UPDATE installations SET progress=MAX(progress, ?), updated_at=? WHERE id=?').bind(progress, now(), site.id).run();
-    await notify(env, { module: 'installations', type: 'success', title: `Work report: ${site.title}`, body: `${ctx.user.name}: ${message.slice(0, 100)}${images.length ? ` (${images.length} photo${images.length > 1 ? 's' : ''})` : ''}`, link: `/admin/#/installations/${site.id}` });
+    await notify(env, { module: 'installations', type: 'success', title: `Work report: ${site.title}`, body: `${ctx.user.name}: ${message.slice(0, 100)}${images.length ? ` (${images.length} photo${images.length > 1 ? 's' : ''})` : ''}`, link: `/staff/#/installations/${site.id}` });
     return ok({ images });
   });
 }

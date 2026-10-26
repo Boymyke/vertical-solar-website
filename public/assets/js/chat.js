@@ -1,4 +1,4 @@
-// "Sola" — the Vertical Solar AI assistant. Text chat, voice dictation and hands-free voice conversation.
+// "Vola" — the Vertical Solar AI assistant. Text chat, voice dictation and hands-free voice conversation.
 import { $, esc, api, store, getSite } from './core.js';
 import { currentLang } from './i18n.js';
 
@@ -37,7 +37,7 @@ function addMsg(role, text, { speakable = true, raw = false } = {}) {
     const { html, links } = md(text);
     div.innerHTML = html + (links.length ? `<div class="links">${links.map((l) => `<a href="${l.url}"><i class="ri-arrow-right-up-line" aria-hidden="true"></i>${l.label}</a>`).join('')}</div>` : '') +
       (speakable && ('speechSynthesis' in window || site?.voice?.natural) ? `<button class="speak" type="button"><i class="ri-volume-up-line" aria-hidden="true"></i> Listen</button>` : '');
-    div.querySelector('.speak')?.addEventListener('click', () => speak(text));
+    div.querySelector('.speak')?.addEventListener('click', (e) => togglePlay(e.currentTarget, text));
   }
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
@@ -46,14 +46,46 @@ function addMsg(role, text, { speakable = true, raw = false } = {}) {
 
 function typing(on) {
   let t = $('.typing', log);
-  if (on && !t) { t = document.createElement('div'); t.className = 'msg bot typing'; t.innerHTML = '<span></span><span></span><span></span>'; t.setAttribute('aria-label', 'Sola is typing'); log.appendChild(t); log.scrollTop = log.scrollHeight; }
+  if (on && !t) { t = document.createElement('div'); t.className = 'msg bot typing'; t.innerHTML = '<span></span><span></span><span></span>'; t.setAttribute('aria-label', 'Vola is typing'); log.appendChild(t); log.scrollTop = log.scrollHeight; }
   if (!on && t) t.remove();
 }
 
 // Speaking: Nigerian voices from the server when available, otherwise the best voice the browser has
 // (Edge ships Nigerian English voices; others fall back to British or any English voice).
 let audioEl = null;
-function stopSpeaking() { try { speechSynthesis.cancel(); } catch {} if (audioEl) { audioEl.pause(); audioEl = null; } }
+// One "Listen" button at a time works like a media player: Listen → Pause → Resume.
+const player = { btn: null, state: 'idle', text: '' };
+const BTN = { idle: ['ri-volume-up-line', 'Listen'], loading: ['ri-loader-4-line spin', 'Loading…'], playing: ['ri-pause-fill', 'Pause'], paused: ['ri-play-fill', 'Resume'] };
+function setBtn(btn, state) { if (!btn) return; const [ic, label] = BTN[state]; btn.innerHTML = `<i class="${ic}" aria-hidden="true"></i> ${label}`; btn.setAttribute('aria-pressed', String(state === 'playing')); btn.classList.toggle('is-active', state !== 'idle'); }
+function setPlayer(state) { player.state = state; setBtn(player.btn, state); voiceToggleUi(); }
+function stopSpeaking() {
+  try { speechSynthesis.cancel(); } catch {}
+  if (audioEl) { audioEl.pause(); audioEl = null; }
+  if (player.btn) setBtn(player.btn, 'idle');
+  player.btn = null; player.state = 'idle'; voiceToggleUi();
+}
+function pauseSpeaking() {
+  if (player.state !== 'playing') return;
+  if (audioEl) audioEl.pause(); else { try { speechSynthesis.pause(); } catch {} }
+  setPlayer('paused');
+}
+function resumeSpeaking() {
+  if (player.state !== 'paused') return;
+  if (audioEl) audioEl.play().catch(() => {});
+  else { try { speechSynthesis.resume(); } catch {} if (!speechSynthesis.speaking) { speak(player.text, null, player.btn); return; } }
+  setPlayer('playing');
+}
+function togglePlay(btn, text) {
+  if (player.btn === btn && player.state === 'playing') return pauseSpeaking();
+  if (player.btn === btn && player.state === 'paused') return resumeSpeaking();
+  speak(text, null, btn);
+}
+// The voice-conversation screen gets the same pause/resume control while Vola is talking.
+function voiceToggleUi() {
+  const b = document.querySelector('[data-vpause]'); if (!b) return;
+  b.hidden = player.state === 'idle' || player.state === 'loading';
+  b.innerHTML = player.state === 'paused' ? '<i class="ri-play-fill" aria-hidden="true"></i> Resume' : '<i class="ri-pause-fill" aria-hidden="true"></i> Pause';
+}
 function browserVoice(l) {
   const vs = 'speechSynthesis' in window ? speechSynthesis.getVoices() : [];
   const want = SPEECH_LANG[l] || 'en-NG';
@@ -65,21 +97,27 @@ function speakBrowser(text, l, onend) {
   const u = new SpeechSynthesisUtterance(plain(text));
   const v = browserVoice(l); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = SPEECH_LANG[l] || 'en-NG';
   u.rate = 1;
-  u.onend = () => onend?.(); u.onerror = () => onend?.();
+  const done = () => { if (player.state !== 'idle') { setBtn(player.btn, 'idle'); player.btn = null; player.state = 'idle'; voiceToggleUi(); } onend?.(); };
+  u.onend = done; u.onerror = done;
   speechSynthesis.speak(u);
+  setPlayer('playing');
 }
-async function speak(text, onend) {
+async function speak(text, onend, btn = null) {
   stopSpeaking();
+  player.btn = btn; player.text = text;
   const l = chatLang();
   if (site?.voice?.natural) {
+    setPlayer('loading');
     try {
       const r = await fetch('/api/public/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: plain(text).slice(0, 900), lang: l }) });
       if (!r.ok) throw new Error('voice');
+      if (player.btn !== btn) return; // another message was started meanwhile
       const url = URL.createObjectURL(await r.blob());
-      audioEl = new Audio(url);
-      audioEl.onended = () => { URL.revokeObjectURL(url); audioEl = null; onend?.(); };
-      audioEl.onerror = () => { URL.revokeObjectURL(url); audioEl = null; speakBrowser(text, l, onend); };
-      await audioEl.play();
+      const a = audioEl = new Audio(url);
+      a.onended = () => { URL.revokeObjectURL(url); if (audioEl === a) { audioEl = null; setBtn(player.btn, 'idle'); player.btn = null; player.state = 'idle'; voiceToggleUi(); } onend?.(); };
+      a.onerror = () => { URL.revokeObjectURL(url); if (audioEl === a) audioEl = null; speakBrowser(text, l, onend); };
+      await a.play();
+      setPlayer('playing');
       return;
     } catch { /* fall through to the browser voice */ }
   }
@@ -200,12 +238,13 @@ function openVoice() {
   voice.on = true;
   voice.stage = document.createElement('div');
   voice.stage.className = 'voice-stage';
-  voice.stage.innerHTML = `<button class="orb" type="button" aria-label="Talk to Sola"></button><strong data-vstatus aria-live="polite"></strong><p data-vtext></p>
-    <div class="btn-row"><button class="btn btn-light btn-sm" type="button" data-vend><i class="ri-keyboard-line" aria-hidden="true"></i> Back to typing</button></div>
+  voice.stage.innerHTML = `<button class="orb" type="button" aria-label="Talk to Vola"></button><strong data-vstatus aria-live="polite"></strong><p data-vtext></p>
+    <div class="btn-row"><button class="btn btn-light btn-sm" type="button" data-vpause hidden></button><button class="btn btn-light btn-sm" type="button" data-vend><i class="ri-keyboard-line" aria-hidden="true"></i> Back to typing</button></div>
     <small style="opacity:.75"><span translate="no">${CHAT_LANGS[chatLang()]}</span> · <span>${useBrowserStt() ? 'Talk, then pause — I reply when you stop.' : 'Talk for up to 8 seconds, then wait for my reply.'}</span></small>`;
   panel.appendChild(voice.stage);
   $('.orb', voice.stage).addEventListener('click', () => { stopSpeaking(); voice.rec?.abort?.(); mediaRec?.stop(); listenOnce(); });
   $('[data-vend]', voice.stage).addEventListener('click', closeVoice);
+  $('[data-vpause]', voice.stage).addEventListener('click', () => (player.state === 'paused' ? resumeSpeaking() : pauseSpeaking()));
   listenOnce();
 }
 function closeVoice() {
@@ -234,13 +273,13 @@ function build() {
   panel = document.createElement('section');
   panel.className = 'chat-panel';
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'Chat with Sola, the Vertical Solar assistant');
-  const name = site?.ai?.assistant_name || 'Sola';
+  panel.setAttribute('aria-label', 'Chat with Vola, the Vertical Solar assistant');
+  const name = site?.ai?.assistant_name || 'Vola';
   panel.innerHTML = `
     <div class="chat-head"><span class="avatar"><i class="ri-sun-line" aria-hidden="true"></i></span><div style="min-width:0"><strong>${esc(name)}</strong><small>Vertical Solar assistant</small></div>
       <label class="sr-only" for="chat-lang">Chat language</label>
-      <select id="chat-lang" class="chat-lang" data-chat-lang translate="no" title="Language Sola speaks">${Object.entries(CHAT_LANGS).map(([k, v]) => `<option value="${k}"${k === chatLang() ? ' selected' : ''}>${v}</option>`).join('')}</select>
-      ${site?.features?.voice_enabled !== false ? '<button class="icon-btn" type="button" data-voice aria-label="Start a voice conversation" title="Talk to Sola"><i class="ri-voiceprint-line" aria-hidden="true"></i></button>' : ''}
+      <select id="chat-lang" class="chat-lang" data-chat-lang translate="no" title="Language Vola speaks">${Object.entries(CHAT_LANGS).map(([k, v]) => `<option value="${k}"${k === chatLang() ? ' selected' : ''}>${v}</option>`).join('')}</select>
+      ${site?.features?.voice_enabled !== false ? '<button class="icon-btn" type="button" data-voice aria-label="Start a voice conversation" title="Talk to Vola"><i class="ri-voiceprint-line" aria-hidden="true"></i></button>' : ''}
       <button class="icon-btn" type="button" data-chat-expand aria-label="Make the chat bigger" aria-pressed="false" title="Bigger window"><i class="ri-fullscreen-line" aria-hidden="true"></i></button>
       <button class="icon-btn" type="button" data-close aria-label="Close chat"><i class="ri-close-line" aria-hidden="true"></i></button></div>
     <div class="chat-log" aria-live="polite"></div>
@@ -274,7 +313,7 @@ function build() {
   let restored = [];
   try { restored = JSON.parse(sessionStorage.getItem('vs-chat-log') || '[]'); } catch {}
   if (restored.length) { restored.forEach((m) => addMsg(m.r === 'user' ? 'user' : 'bot', m.t, { speakable: m.r !== 'user', raw: true })); chips.remove(); }
-  else addMsg('bot', site?.ai?.greeting || "Hi, I'm Sola. Ask me about solar packages, prices, financing or caring for your system.", { speakable: false });
+  else addMsg('bot', site?.ai?.greeting || "Hi, I'm Vola. Ask me about solar packages, prices, financing or caring for your system.", { speakable: false });
 }
 
 export function toggle(open = !state.open) {

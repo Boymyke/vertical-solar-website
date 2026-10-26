@@ -30,7 +30,7 @@ function sameOrigin(req) {
 }
 
 async function serveAdminShell(req, env) {
-  const res = await env.ASSETS.fetch(new Request(new URL('/admin/app', req.url)));
+  const res = await env.ASSETS.fetch(new Request(new URL('/staff/app', req.url)));
   const out = new Response(res.body, res);
   out.headers.set('x-robots-tag', 'noindex, nofollow');
   out.headers.set('cache-control', 'no-cache');
@@ -46,8 +46,12 @@ async function handle(req, env, ctx) {
     return Response.redirect(env.SITE_URL + path + url.search, 301);
   }
 
-  if (path === '/admin' || (path.startsWith('/admin/') && !path.startsWith('/admin/assets/'))) {
-    if (path === '/admin/app' || path === '/admin/app.html') return serveAdminShell(req, env);
+  // The workspace moved from /admin to /staff; old bookmarks and notification links keep working.
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    return new Response(null, { status: 301, headers: { location: '/staff' + path.slice(6) + url.search } });
+  }
+  if (path === '/staff' || (path.startsWith('/staff/') && !path.startsWith('/staff/assets/'))) {
+    if (path === '/staff/app' || path === '/staff/app.html') return serveAdminShell(req, env);
     if (/\.[a-z0-9]{2,5}$/i.test(path)) return env.ASSETS.fetch(req);
     return serveAdminShell(req, env);
   }

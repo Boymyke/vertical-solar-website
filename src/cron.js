@@ -11,14 +11,14 @@ export async function everyTenMinutes(env) {
   const { results: silent } = await env.DB.prepare(`SELECT a.id, u.name, i.title FROM attendance a JOIN users u ON u.id=a.user_id LEFT JOIN installations i ON i.id=a.installation_id
     WHERE a.status='open' AND a.lost_contact_alerted=0 AND a.last_ping_at < datetime('now','-25 minutes')`).all();
   for (const a of silent) {
-    await notify(env, { module: 'attendance', type: 'warning', title: `No location from ${a.name} for 25+ min`, body: `${a.title || 'Job site'} — phone may be off, out of data, or the field app was closed.`, link: '/admin/#/attendance' });
+    await notify(env, { module: 'attendance', type: 'warning', title: `No location from ${a.name} for 25+ min`, body: `${a.title || 'Job site'} — phone may be off, out of data, or the field app was closed.`, link: '/staff/#/attendance' });
     await env.DB.prepare('UPDATE attendance SET lost_contact_alerted=1 WHERE id=?').bind(a.id).run();
   }
   // Forgotten clock-outs.
   const { results: stale } = await env.DB.prepare(`SELECT a.id, u.name FROM attendance a JOIN users u ON u.id=a.user_id WHERE a.status='open' AND a.clock_in_at < datetime('now','-14 hours')`).all();
   for (const a of stale) {
     await env.DB.prepare(`UPDATE attendance SET status='auto_closed', clock_out_at=COALESCE(last_ping_at, ?), note=COALESCE(note,'') || ' Auto-closed after 14h without clock-out.' WHERE id=?`).bind(now(), a.id).run();
-    await notify(env, { module: 'attendance', type: 'warning', title: `${a.name} did not clock out`, body: 'Shift auto-closed after 14 hours.', link: '/admin/#/attendance' });
+    await notify(env, { module: 'attendance', type: 'warning', title: `${a.name} did not clock out`, body: 'Shift auto-closed after 14 hours.', link: '/staff/#/attendance' });
   }
   await env.DB.prepare(`UPDATE quotes SET status='expired' WHERE status IN ('sent','viewed') AND valid_until < datetime('now')`).run();
 }
@@ -41,13 +41,13 @@ export async function daily(env) {
   }
   // 3. Warranties expiring in the next 30 days.
   const w = await env.DB.prepare(`SELECT COUNT(*) n FROM warranties WHERE end_date BETWEEN date('now') AND date('now','+30 days')`).first();
-  if (w.n) await notify(env, { module: 'maintenance', type: 'warning', title: `${w.n} warrant${w.n > 1 ? 'ies' : 'y'} expiring within 30 days`, body: 'Good time to offer an extended service plan.', link: '/admin/#/warranties' });
+  if (w.n) await notify(env, { module: 'maintenance', type: 'warning', title: `${w.n} warrant${w.n > 1 ? 'ies' : 'y'} expiring within 30 days`, body: 'Good time to offer an extended service plan.', link: '/staff/#/warranties' });
   // 4. Today's follow-ups digest.
   const f = await env.DB.prepare(`SELECT COUNT(*) n, SUM(CASE WHEN due_at < date('now') THEN 1 ELSE 0 END) overdue FROM followups WHERE status='pending' AND due_at < date('now','+1 day')`).first();
-  if (f.n) await notify(env, { module: 'followups', type: f.overdue ? 'warning' : 'info', title: `${f.n} follow-up${f.n > 1 ? 's' : ''} due today`, body: f.overdue ? `${f.overdue} overdue` : 'Open the follow-up board to start calling.', link: '/admin/#/followups' });
+  if (f.n) await notify(env, { module: 'followups', type: f.overdue ? 'warning' : 'info', title: `${f.n} follow-up${f.n > 1 ? 's' : ''} due today`, body: f.overdue ? `${f.overdue} overdue` : 'Open the follow-up board to start calling.', link: '/staff/#/followups' });
   // 5. Low stock digest.
   const ls = await env.DB.prepare('SELECT COUNT(*) n FROM products WHERE active=1 AND reorder_level > 0 AND stock <= reorder_level').first();
-  if (ls.n) await notify(env, { module: 'inventory', type: 'warning', title: `${ls.n} product${ls.n > 1 ? 's are' : ' is'} low on stock`, link: '/admin/#/inventory' });
+  if (ls.n) await notify(env, { module: 'inventory', type: 'warning', title: `${ls.n} product${ls.n > 1 ? 's are' : ' is'} low on stock`, link: '/staff/#/inventory' });
   // 6. Housekeeping.
   const nowS = Math.floor(Date.now() / 1000);
   await env.DB.batch([
@@ -66,7 +66,7 @@ export async function daily(env) {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify({ from: `${s.integrations.email_from_name} <${s.integrations.email_from}>`, to, subject: `Daily brief: ${leads.n} new leads, ${f.n || 0} follow-ups due`,
-        text: `Good morning,\n\nNew leads (24h): ${leads.n}\nFollow-ups due today: ${f.n || 0} (${f.overdue || 0} overdue)\nLow-stock items: ${ls.n}\nWarranties expiring in 30 days: ${w.n}\n\nOpen the CRM: ${env.SITE_URL}/admin\n` }),
+        text: `Good morning,\n\nNew leads (24h): ${leads.n}\nFollow-ups due today: ${f.n || 0} (${f.overdue || 0} overdue)\nLow-stock items: ${ls.n}\nWarranties expiring in 30 days: ${w.n}\n\nOpen the CRM: ${env.SITE_URL}/staff\n` }),
     }).catch(() => {});
   }
 }

@@ -52,8 +52,8 @@ export const DEFAULT_SETTINGS = {
     ga4_id: '',
   },
   ai: {
-    assistant_name: 'Sola',
-    greeting: "Hi, I'm Sola, Vertical Solar's assistant. Ask me about solar packages, pricing, financing or caring for your system.",
+    assistant_name: 'Vola',
+    greeting: "Hi, I'm Vola, Vertical Solar's assistant. Ask me about solar packages, pricing, financing or caring for your system.",
     extra_knowledge: '',
   },
   integrations: {
@@ -84,7 +84,7 @@ export async function getSettings(env) {
 }
 
 export async function getPublicSite(env) {
-  const [settings, branches, socials, certificates, popups, packages] = await Promise.all([
+  const [settings, branches, socials, certificates, popups, packages, partners] = await Promise.all([
     getSettings(env),
     env.DB.prepare('SELECT id,name,state,address,phones,email,hours,lat,lng,is_hq FROM branches ORDER BY is_hq DESC, sort, id').all(),
     env.DB.prepare('SELECT platform,icon,url FROM socials WHERE active=1 ORDER BY sort, id').all(),
@@ -93,6 +93,7 @@ export async function getPublicSite(env) {
        WHERE active=1 AND (starts_at IS NULL OR starts_at='' OR starts_at <= datetime('now'))
        AND (ends_at IS NULL OR ends_at='' OR ends_at >= datetime('now')) ORDER BY id DESC`).all(),
     env.DB.prepare('SELECT * FROM packages WHERE published=1 ORDER BY sort, id').all(),
+    env.DB.prepare('SELECT name,logo,url FROM partners WHERE active=1 ORDER BY sort, id').all().catch(() => ({ results: [] })),
   ]);
   const { integrations, ai, ...rest } = settings;
   return {
@@ -105,6 +106,7 @@ export async function getPublicSite(env) {
     certificates: certificates.results || [],
     popups: popups.results || [],
     packages: packages.results || [],
+    partners: partners.results || [],
     voice: { natural: !!env.SPITCH_API_KEY },
   };
 }

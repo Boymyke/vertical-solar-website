@@ -91,7 +91,31 @@ function estimator(site) {
   window.addEventListener('vs:lang', render);
 }
 
+// Process steps light up one after another as the section scrolls into view.
+function stepsOnScroll() {
+  const list = $('[data-steps]'); if (!list || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cards = $$('.step-card', list), dots = $$('.steps-progress i'), bar = $('.steps-progress');
+  list.classList.add('js-steps');
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const vh = innerHeight, r = list.getBoundingClientRect();
+    const oneRow = cards.length > 1 && Math.abs(cards[0].getBoundingClientRect().top - cards[cards.length - 1].getBoundingClientRect().top) < 4;
+    if (oneRow) {
+      // 0 when the cards' top reaches 85% of the screen, 1 when it reaches 35%.
+      const p = Math.min(1, Math.max(0, (vh * .85 - r.top) / (vh * .5)));
+      bar?.style.setProperty('--p', p.toFixed(3));
+      cards.forEach((c, i) => { const on = p >= (i + .5) / cards.length - .08; c.classList.toggle('on', on); dots[i]?.classList.toggle('on', on); });
+    } else {
+      cards.forEach((c) => c.classList.toggle('on', c.getBoundingClientRect().top < vh * .82));
+    }
+  };
+  const req = () => { if (!raf) raf = requestAnimationFrame(update); };
+  addEventListener('scroll', req, { passive: true }); addEventListener('resize', req); update();
+}
+
 export default async function (site) {
+  stepsOnScroll();
   const applyHero = () => {
     if (!site?.hero) return;
     const h1 = $('#hero-title'), sub = $('.hero .lede');

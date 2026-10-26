@@ -66,6 +66,35 @@ export function registerAuth(r) {
     });
   });
 
+  // Sign-in link for new staff: shows who it is for, then lets them choose a password and signs them in.
+  const inviteUser = async (env, token) => {
+    if (!token || String(token).length < 20) return null;
+    const u = await env.DB.prepare('SELECT id, name, email, active, must_change_password, invite_expires FROM users WHERE invite_hash=?').bind(await sha256(String(token))).first();
+    if (!u || !u.active || !u.must_change_password || !u.invite_expires || u.invite_expires < now()) return null;
+    return u;
+  };
+  r.post('/api/auth/invite', async (req, env) => {
+    await rateLimit(env, `invite:${clientIp(req)}`, 30, 900);
+    const b = await readJson(req, 2048);
+    const u = await inviteUser(env, b.token);
+    if (!u) fail(410, 'This sign-in link has expired or was already used. Sign in with your email and password, or ask the administrator for a new link.');
+    return json({ name: u.name, email: u.email });
+  });
+  r.post('/api/auth/invite/accept', async (req, env) => {
+    await rateLimit(env, `invite:${clientIp(req)}`, 30, 900);
+    const b = await readJson(req, 4096);
+    const u = await inviteUser(env, b.token);
+    if (!u) fail(410, 'This sign-in link has expired or was already used. Ask the administrator for a new link.');
+    const probs = passwordProblems(String(b.password || ''));
+    if (probs.length) fail(400, 'Your password needs ' + probs.join(', '));
+    const { hash, salt } = await hashPassword(String(b.password));
+    await env.DB.prepare('UPDATE users SET password_hash=?, password_salt=?, must_change_password=0, invite_hash=NULL, invite_expires=NULL, failed_logins=0, locked_until=NULL, last_login_at=?, updated_at=? WHERE id=?').bind(hash, salt, now(), now(), u.id).run();
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(u.id).run();
+    const cookie = await createSession(env, req, u.id);
+    await audit(env, req, { id: u.id }, 'invite_accepted', 'users', u.id);
+    return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'set-cookie': cookie, 'cache-control': 'no-store' } });
+  });
+
   r.post('/api/auth/logout', async (req, env, _p, ctx) => {
     if (ctx.user) await env.DB.prepare('DELETE FROM sessions WHERE id=?').bind(ctx.user.session_id).run();
     return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'set-cookie': clearCookie() } });
@@ -90,7 +119,7 @@ export function registerAuth(r) {
     const probs = passwordProblems(String(b.password || ''));
     if (probs.length) fail(400, 'New password needs ' + probs.join(', '));
     const { hash, salt } = await hashPassword(String(b.password));
-    await env.DB.prepare('UPDATE users SET password_hash=?, password_salt=?, must_change_password=0, updated_at=? WHERE id=?').bind(hash, salt, now(), ctx.user.id).run();
+    await env.DB.prepare('UPDATE users SET password_hash=?, password_salt=?, must_change_password=0, invite_hash=NULL, invite_expires=NULL, updated_at=? WHERE id=?').bind(hash, salt, now(), ctx.user.id).run();
     await env.DB.prepare('DELETE FROM sessions WHERE user_id=? AND id != ?').bind(ctx.user.id, ctx.user.session_id).run();
     await audit(env, req, ctx.user, 'password_changed', 'users', ctx.user.id);
     return ok();

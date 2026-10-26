@@ -106,7 +106,13 @@ ${related.length ? `<section class="related"><h2>Keep reading</h2><div class="gr
   <p class="lede"><i class="ri-map-pin-2-line" aria-hidden="true"></i> ${escapeHtml(p.location || '')}${p.client ? ' · Client: ' + escapeHtml(p.client) : ''}</p>
 </header>
 <div class="spec-row reveal">${spec('Solar PV', p.pv_kwp, 'kWp', 'ri-sun-line')}${spec('Inverter', p.inverter_kw, 'kW', 'ri-flashlight-line')}${spec('Battery storage', p.battery_kwh, 'kWh', 'ri-battery-2-charge-line')}</div>
-${imgs.length ? `<div class="gallery reveal" data-lightbox>${imgs.map((src, i) => `<button class="gallery-item" type="button" data-full="${escapeHtml(src)}" aria-label="Open photo ${i + 1}"><img src="${escapeHtml(src)}" alt="${escapeHtml(p.title)} photo ${i + 1}" loading="${i ? 'lazy' : 'eager'}"></button>`).join('')}</div>` : ''}
+${imgs.length ? `<section class="pgal" data-carousel aria-roledescription="carousel" aria-label="Project photos">
+  <div class="pgal-stage" data-lightbox>
+    <div class="pgal-track" data-track tabindex="0">${imgs.map((src, i) => `<button class="pgal-slide" type="button" data-full="${escapeHtml(src)}" aria-label="Photo ${i + 1} of ${imgs.length} — open full size"><img src="${escapeHtml(src)}" alt="${escapeHtml(p.title)} photo ${i + 1}" loading="${i ? 'lazy' : 'eager'}" decoding="async"></button>`).join('')}</div>
+    ${imgs.length > 1 ? `<button class="pgal-nav prev" type="button" data-prev aria-label="Previous photo"><i class="ri-arrow-left-line" aria-hidden="true"></i></button><button class="pgal-nav next" type="button" data-next aria-label="Next photo"><i class="ri-arrow-right-line" aria-hidden="true"></i></button><span class="pgal-count" data-count-label aria-live="polite">1 / ${imgs.length}</span>` : ''}
+  </div>
+  ${imgs.length > 1 ? `<div class="pgal-thumbs">${imgs.map((src, i) => `<button type="button" data-go="${i}" aria-label="Show photo ${i + 1}"${i ? '' : ' aria-current="true"'}><img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>` : ''}
+</section>` : ''}
 <div class="post-layout"><article class="prose">${p.summary ? `<p class="lede">${escapeHtml(p.summary)}</p>` : ''}${p.body || ''}
 ${p.video_url ? `<div class="video-embed" data-video="${escapeHtml(p.video_url)}"></div>` : ''}
 ${t.map((x) => `<blockquote class="quote-card"><p>“${escapeHtml(x.quote)}”</p><footer>${escapeHtml(x.name)}${x.role ? ', ' + escapeHtml(x.role) : ''}${x.verified ? ' <span class="badge-verified"><i class="ri-shield-check-fill" aria-hidden="true"></i> Verified customer</span>' : ''}</footer></blockquote>`).join('')}
@@ -177,7 +183,7 @@ ${t.map((x) => `<blockquote class="quote-card"><p>“${escapeHtml(x.quote)}”</
 
   r.get('/robots.txt', async (req, env) => {
     const site = env.SITE_URL || new URL(req.url).origin;
-    return new Response(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /q/\nDisallow: /tpl/\nDisallow: /cart\n\nSitemap: ${site}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=3600' } });
+    return new Response(`User-agent: *\nAllow: /\nDisallow: /staff\nDisallow: /api/\nDisallow: /q/\nDisallow: /tpl/\nDisallow: /cart\n\nSitemap: ${site}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=3600' } });
   });
 
   r.get('/sitemap.xml', async (req, env) => {

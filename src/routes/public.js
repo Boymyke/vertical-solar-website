@@ -43,29 +43,47 @@ export async function upsertLead(env, { name, phone, email, city, state, segment
 // Location search for address fields (website forms and the CRM). Photon (OpenStreetMap data) is built for
 // search-as-you-type; results are limited to Nigeria and cached at the edge for a day.
 const NG_BBOX = '2.67,4.07,14.68,13.89';
+// Address search (OpenStreetMap via Photon), limited to Nigeria. Returns building-level results where the map
+// has them (house number or a named building/business), otherwise the street — keeping the house number the
+// visitor typed — and finally the area. Each result says how precise it is.
+const HOUSE_RE = /^\s*(?:no\.?|number|plot|house|blk\.?|block)?\s*(\d+[a-z]?(?:\s*[-/]\s*\d+[a-z]?)?)\s*,?\s+/i;
 export async function searchPlaces(q, siteUrl) {
-  const query = String(q || '').trim().slice(0, 120);
+  const query = String(q || '').trim().replace(/\s+/g, ' ').slice(0, 140);
   if (query.length < 3) return [];
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=7&lang=en&bbox=${NG_BBOX}&lat=6.52&lon=3.38`;
-  const cache = caches.default;
-  const key = new Request(url);
-  let res = await cache.match(key);
-  if (!res) {
-    res = await fetch(url, { headers: { 'user-agent': `VerticalSolarWebsite/1.0 (+${siteUrl || 'https://verticalsolar.com.ng'})`, accept: 'application/json' }, cf: { cacheTtl: 86400 } });
-    if (!res.ok) return [];
-    res = new Response(res.body, res);
-    res.headers.set('cache-control', 'public, max-age=86400');
-    await cache.put(key, res.clone());
-  }
-  const data = await res.json().catch(() => ({}));
+  const house = (query.match(HOUSE_RE) || [])[1] || '';
+  const fetchPhoton = async (text) => {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=8&lang=en&bbox=${NG_BBOX}&lat=6.52&lon=3.38`;
+    const cache = caches.default, key = new Request(url);
+    let res = await cache.match(key);
+    if (!res) {
+      try { res = await fetch(url, { headers: { 'user-agent': `VerticalSolarWebsite/1.0 (+${siteUrl || 'https://verticalsolar.com.ng'})`, accept: 'application/json' }, cf: { cacheTtl: 86400 } }); } catch { return []; }
+      if (!res.ok) return [];
+      res = new Response(res.body, res);
+      res.headers.set('cache-control', 'public, max-age=86400');
+      await cache.put(key, res.clone());
+    }
+    return ((await res.json().catch(() => ({}))).features || []);
+  };
+  let feats = await fetchPhoton(query);
+  // Many Nigerian houses are not numbered on the map: search the street without the number as well.
+  if (house) { const rest = query.replace(HOUSE_RE, ''); if (rest.length >= 3) feats = feats.concat(await fetchPhoton(rest)); }
   const seen = new Set();
-  return (data.features || []).filter((f) => !f.properties?.countrycode || f.properties.countrycode === 'NG').map((f) => {
+  return feats.filter((f) => !f.properties?.countrycode || f.properties.countrycode === 'NG').map((f) => {
     const p = f.properties || {};
-    const name = p.name || [p.housenumber, p.street].filter(Boolean).join(' ');
-    const area = [p.district || p.locality, p.city || p.county, p.state].filter((x, i, a) => x && x !== name && a.indexOf(x) === i);
+    const isStreet = p.osm_key === 'highway' || p.type === 'street';
+    const named = p.name && !isStreet ? p.name : '';
+    let line = [p.housenumber, p.street || (isStreet ? p.name : '')].filter(Boolean).join(' ');
+    let precision = p.housenumber || (named && (p.street || p.osm_key === 'building' || p.osm_key === 'amenity' || p.osm_key === 'shop' || p.osm_key === 'office')) ? 'building' : isStreet || p.street ? 'street' : 'area';
+    // Street-level result: keep the house number the person typed.
+    if (precision === 'street' && house && !p.housenumber && line) { line = `No. ${house} ${line}`; precision = 'house'; }
+    const first = [named, line].filter(Boolean).join(', ');
+    const area = [p.district || p.locality, p.city || p.county, p.state].filter((x, i, a) => x && x !== first && x !== p.name && a.indexOf(x) === i);
     const [lng, lat] = f.geometry?.coordinates || [];
-    return { label: [name, ...area].filter(Boolean).join(', '), name, sub: area.join(', '), city: p.city || p.county || p.district || '', state: (p.state || '').replace(/ State$/, ''), lat, lng };
-  }).filter((x) => x.label && Number.isFinite(x.lat) && !seen.has(x.label) && seen.add(x.label));
+    const label = [first || p.name, ...area].filter(Boolean).join(', ');
+    return { label, name: first || p.name || '', sub: area.join(', '), precision, city: p.city || p.county || p.district || '', state: (p.state || '').replace(/ State$/, ''), lat, lng };
+  }).filter((x) => x.label && Number.isFinite(x.lat) && !seen.has(x.label) && seen.add(x.label))
+    .sort((a, b) => ['building', 'house', 'street', 'area'].indexOf(a.precision) - ['building', 'house', 'street', 'area'].indexOf(b.precision))
+    .slice(0, 8);
 }
 
 export function registerPublic(r) {
@@ -198,7 +216,7 @@ export function registerPublic(r) {
       module: 'crm', type: 'success',
       title: `${isNew ? 'New lead' : 'Returning contact'}: ${name}`,
       body: `${kind}${b.package ? ' — ' + b.package : ''} · ${phone || email}`,
-      link: `/admin/#/customers/${id}`,
+      link: `/staff/#/customers/${id}`,
     });
     await env.DB.prepare('INSERT INTO events (name, path, meta) VALUES (?,?,?)').bind('lead_' + kind, str(b.page, 200), JSON.stringify({ customer_id: id })).run();
     return ok({ message: 'Thank you — our team will contact you within 24 hours.' });
@@ -220,7 +238,7 @@ export function registerPublic(r) {
     const priority = cat === 'fault' ? 'high' : 'normal';
     await env.DB.prepare(`INSERT INTO tickets (number, customer_id, name, email, phone, subject, message, category, priority) VALUES (?,?,?,?,?,?,?,?,?)`)
       .bind(number, customerId, name, email, normPhone(phone), subject, message, cat, priority).run();
-    await notify(env, { module: 'support', type: priority === 'high' ? 'warning' : 'info', title: `Support ticket ${number}`, body: `${name}: ${subject}`, link: '/admin/#/support' });
+    await notify(env, { module: 'support', type: priority === 'high' ? 'warning' : 'info', title: `Support ticket ${number}`, body: `${name}: ${subject}`, link: '/staff/#/support' });
     return ok({ number, message: `Ticket ${number} received. Our support team will respond shortly.` });
   });
 
@@ -266,7 +284,7 @@ export function registerPublic(r) {
     await env.DB.prepare(`INSERT INTO orders (number, customer_id, name, email, phone, address, city, state, items, subtotal, delivery, total, payment_method, notes)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(number, customerId, name, email, normPhone(phone), str(b.address, 300), str(b.city, 80), str(b.state, 80),
       JSON.stringify(items), subtotal, delivery, subtotal + delivery, b.payment_method === 'paystack' ? 'paystack' : 'transfer', str(b.notes, 1000)).run();
-    await notify(env, { module: 'shop', type: 'success', title: `New order ${number}`, body: `${name} · ₦${(subtotal + delivery).toLocaleString()}`, link: '/admin/#/orders' });
+    await notify(env, { module: 'shop', type: 'success', title: `New order ${number}`, body: `${name} · ₦${(subtotal + delivery).toLocaleString()}`, link: '/staff/#/orders' });
     return ok({ number, total: subtotal + delivery, email: email || null });
   });
 
@@ -284,7 +302,7 @@ export function registerPublic(r) {
     const paid = data?.data?.status === 'success' && Math.round(data.data.amount) >= Math.round(order.total * 100);
     if (paid) {
       await env.DB.prepare(`UPDATE orders SET status='paid', payment_ref=?, paid_at=?, updated_at=? WHERE id=?`).bind(ref, now(), now(), order.id).run();
-      await notify(env, { module: 'shop', type: 'success', title: `Order ${order.number} paid online`, body: `Paystack ref ${ref}`, link: '/admin/#/orders' });
+      await notify(env, { module: 'shop', type: 'success', title: `Order ${order.number} paid online`, body: `Paystack ref ${ref}`, link: '/staff/#/orders' });
     }
     return ok({ status: paid ? 'paid' : order.status, verified: paid });
   });
@@ -298,7 +316,7 @@ export function registerPublic(r) {
     if (!viewer) {
       await env.DB.prepare(`UPDATE quotes SET view_count=view_count+1, viewed_at=COALESCE(viewed_at, ?), status=CASE WHEN status='sent' THEN 'viewed' ELSE status END WHERE id=?`)
         .bind(now(), q.id).run();
-      if (!q.viewed_at) await notify(env, { module: 'quotes', type: 'info', title: `Quote ${q.number} opened`, body: `${q.customer_name || 'Customer'} viewed the quote`, link: `/admin/#/quotes/${q.id}` });
+      if (!q.viewed_at) await notify(env, { module: 'quotes', type: 'info', title: `Quote ${q.number} opened`, body: `${q.customer_name || 'Customer'} viewed the quote`, link: `/staff/#/quotes/${q.id}` });
     }
     const settings = await getSettings(env);
     const { created_by, token: _t, ...safe } = q;
@@ -323,7 +341,7 @@ export function registerPublic(r) {
       await env.DB.prepare(`UPDATE followups SET status='done', completed_at=?, outcome=? WHERE customer_id=? AND title=? AND status='pending'`)
         .bind(now(), `Customer ${action} the quote online`, q.customer_id, `Chase quote ${q.number}`).run();
     }
-    await notify(env, { module: 'quotes', type: action === 'accepted' ? 'success' : 'warning', title: `Quote ${q.number} ${action}`, body: name || '', link: `/admin/#/quotes/${q.id}` });
+    await notify(env, { module: 'quotes', type: action === 'accepted' ? 'success' : 'warning', title: `Quote ${q.number} ${action}`, body: name || '', link: `/staff/#/quotes/${q.id}` });
     return ok({ status: action });
   });
 
@@ -344,7 +362,7 @@ export function registerPublic(r) {
     try { b = JSON.parse(await req.text()); } catch { return new Response(null, { status: 204 }); }
     const cf = req.cf || {};
     const path = (str(b.path, 200) || '/').split('?')[0];
-    if (path.startsWith('/admin')) return new Response(null, { status: 204 });
+    if (path.startsWith('/staff')) return new Response(null, { status: 204 });
 
     if (b.type === 'pv') {
       await env.DB.prepare(`INSERT OR IGNORE INTO pageviews (pv_id, visitor_id, session_id, path, title, referrer, utm_source, utm_campaign, country, region, city, lat, lng, timezone, device, browser, os, lang, screen_w, is_new)
