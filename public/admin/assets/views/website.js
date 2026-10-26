@@ -55,9 +55,9 @@ function popupEditor(item, reload) {
     if (!validate(form)) return;
     const body = readForm(form, POPUP_FIELDS);
     if (body.cta_text && !body.cta_url) return fail(new Error('Choose where the button goes, or remove the button text.'));
-    e.currentTarget.classList.add('loading');
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
     try { item?.id ? await api(`/api/admin/popups/${item.id}`, { method: 'PUT', body }) : await api('/api/admin/popups', { body }); toast('Saved — live on the website within a minute'); close(); reload(); }
-    catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
   $('[data-del]', el)?.addEventListener('click', async () => { if (!(await confirmBox('Delete this pop-up?', { danger: true, ok: 'Delete' }))) return; await api(`/api/admin/popups/${item.id}`, { method: 'DELETE' }); toast('Deleted'); close(); reload(); });
 }
@@ -84,9 +84,9 @@ async function policies(tab) {
     $('[data-cancel]', el).onclick = close;
     $('[data-save]', el).onclick = async (ev) => {
       if (!validate(form)) return;
-      ev.currentTarget.classList.add('loading');
+      const busyBtn = ev.currentTarget; busyBtn.classList.add('loading');
       try { await api(`/api/admin/policies/${p.key}`, { method: 'PUT', body: readForm(form, fields) }); toast('Published — the page is updated'); close(); policies(tab); }
-      catch (err) { fail(err); ev.currentTarget.classList.remove('loading'); }
+      catch (err) { fail(err); busyBtn.classList.remove('loading'); }
     };
     $('[data-reset]', el)?.addEventListener('click', async () => { if (!(await confirmBox('Go back to the original wording for this page?', { ok: 'Use the original' }))) return; await api(`/api/admin/policies/${p.key}`, { method: 'DELETE' }); toast('Original wording restored'); close(); policies(tab); });
   };

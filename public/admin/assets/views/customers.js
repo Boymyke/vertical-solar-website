@@ -20,11 +20,16 @@ export async function staffOptions() {
 }
 
 export async function customerForm(existing, onSaved) {
-  const users = await staffOptions();
+  const [users, me] = await Promise.all([staffOptions(), existing ? api('/api/auth/me').catch(() => null) : null]);
+  const canDelete = existing && me?.role === 'owner';
   const fields = CUSTOMER_FIELDS.map((f) => (f.name === 'assigned_to' ? { ...f, options: [['', 'Unassigned'], ...users.map((u) => [u.id, u.name])] } : f));
   const { el, close } = modal({ title: existing ? `Edit ${existing.name}` : 'New customer / lead', size: 'wide',
     body: `<form data-f>${formHtml(fields, existing || { stage: 'new', status: 'lead', segment: 'residential', source: 'manual' })}</form>`,
-    footer: `<button class="btn" data-x2>Cancel</button><button class="btn btn-primary" data-save><i class="ri-save-line"></i> Save</button>` });
+    footer: `${canDelete ? '<button class="btn btn-danger" data-del style="margin-right:auto"><i class="ri-delete-bin-line"></i> Delete customer</button>' : ''}<button class="btn" data-x2>Cancel</button><button class="btn btn-primary" data-save><i class="ri-save-line"></i> Save</button>` });
+  $('[data-del]', el)?.addEventListener('click', async () => {
+    if (!(await confirmBox(`Delete ${existing.name}? Their record, timeline, follow-ups and warranties are removed for good. Quotes, jobs, orders and tickets are kept for your accounts.`, { danger: true, ok: 'Delete customer' }))) return;
+    try { await api(`/api/admin/customers/${existing.id}`, { method: 'DELETE' }); toast('Customer deleted'); close(); location.hash = '#/customers'; } catch (err) { fail(err); }
+  });
   const form = $('[data-f]', el);
   bindWidgets(form);
   import('/assets/js/places.js').then(() => form.querySelector('[name=address]').addEventListener('change', () => {
@@ -38,11 +43,11 @@ export async function customerForm(existing, onSaved) {
     const body = readForm(f, fields);
     if (!body.whatsapp) body.whatsapp = body.phone;
     if (body.assigned_to === '') body.assigned_to = null;
-    e.currentTarget.classList.add('loading');
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
     try {
       const r = existing ? await api(`/api/admin/customers/${existing.id}`, { method: 'PUT', body }) : await api('/api/admin/customers', { body });
       toast('Saved'); close(); onSaved?.(r.item);
-    } catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    } catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
 }
 

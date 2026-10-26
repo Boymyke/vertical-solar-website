@@ -145,6 +145,7 @@ export function registerStaff(r) {
     const end = /^\d{2}:\d{2}$/.test(b.end_time || '') ? b.end_time : null;
     if (!userIds.length) fail(400, 'Choose at least one staff member');
     if (!dates.length || !start) fail(400, 'Choose the date and the time they should be on site');
+    if (end && end <= start) fail(400, 'The finish time must be later than the start time');
     const stmts = [];
     for (const d of dates) for (const uid of userIds) {
       stmts.push(env.DB.prepare('INSERT INTO shifts (installation_id, user_id, starts_at, ends_at, note, created_by) VALUES (?,?,?,?,?,?)')
@@ -171,6 +172,7 @@ export function registerStaff(r) {
       return ok();
     }
     if (date && start) {
+      if (/^\d{2}:\d{2}$/.test(b.end_time || '') && b.end_time <= start) fail(400, 'The finish time must be later than the start time');
       const end = /^\d{2}:\d{2}$/.test(b.end_time || '') ? lagosToUtc(date, b.end_time) : null;
       await env.DB.prepare(`UPDATE shifts SET starts_at=?, ends_at=?, note=COALESCE(?, note), status=CASE WHEN status IN ('late','missed') THEN 'scheduled' ELSE status END,
         reminded_at=NULL, late_notified_at=NULL, escalated_at=NULL WHERE id=?`).bind(lagosToUtc(date, start), end, str(b.note, 300), id).run();

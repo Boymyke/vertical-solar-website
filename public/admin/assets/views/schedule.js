@@ -9,11 +9,12 @@ export const avatarOf = (u, name = u.name || u.user_name) => (u.avatar || u.user
 export function shiftRows(items, { showSite = true, showPerson = true } = {}) {
   if (!items.length) return '';
   return items.map((s) => {
-    const [cls, txt] = ST[s.status] || ST.scheduled;
-    const extra = s.status === 'arrived' && s.late_minutes > 10 ? `${s.late_minutes} min late` : s.status === 'arrived' ? 'On time' : txt;
+    let [cls, txt] = ST[s.status] || ST.scheduled;
+    if (s.status === 'arrived') [cls, txt] = s.late_minutes > 10 ? ['warn', `Arrived ${s.late_minutes} min late`] : ['ok', 'Arrived on time'];
+    const extra = txt;
     return `<div class="li" data-shift="${s.id}"><div class="li-icon" style="width:62px;flex-direction:column;display:flex;justify-content:center;font-size:11px;line-height:1.2;text-align:center"><strong style="font-size:14px">${esc(s.start_local)}</strong><span class="muted">${esc(prettyDay(s.starts_at).replace(/,.*/, ''))}</span></div>
       ${showPerson ? avatarOf(s) : ''}<div class="body"><strong>${showPerson ? esc(s.user_name) : esc(s.site)}</strong><div class="meta">${esc(prettyDay(s.starts_at))}${s.end_local ? ` · ${esc(s.start_local)}–${esc(s.end_local)}` : ''}${showSite && showPerson ? ` · ${esc(s.site)}` : ''}${s.note ? ` · ${esc(s.note)}` : ''}</div></div>
-      <span class="pill ${cls}">${extra}</span>${s.status === 'scheduled' || s.status === 'late' ? `<button class="icon-btn" type="button" data-cancel-shift="${s.id}" title="Cancel this schedule" aria-label="Cancel this schedule"><i class="ri-close-circle-line"></i></button>` : ''}</div>`;
+      <span class="pill tx ${cls}">${esc(extra)}</span>${s.status === 'scheduled' || s.status === 'late' ? `<button class="icon-btn" type="button" data-cancel-shift="${s.id}" title="Cancel this schedule" aria-label="Cancel this schedule"><i class="ri-close-circle-line"></i></button>` : ''}</div>`;
   }).join('');
 }
 
@@ -49,14 +50,15 @@ export function scheduleModal({ installations, installationId, users, assigned =
     const fd = new FormData(f);
     const ids = fd.getAll('user_ids').map(Number);
     if (!ids.length) return toast('Tick at least one person', 'err');
+    if (fd.get('end_time') && fd.get('end_time') <= fd.get('start_time')) { $('#sf-end', el).setAttribute('aria-invalid', 'true'); return toast('The finish time must be later than the start time', 'err'); }
     const n = Number(fd.get('days')), dates = [];
     const d0 = new Date(fd.get('date') + 'T12:00:00Z');
     for (let i = 0; dates.length < n && i < n * 2; i++) { const d = new Date(d0.getTime() + i * 864e5); if (fd.get('skip_sunday') && d.getUTCDay() === 0) continue; dates.push(d.toISOString().slice(0, 10)); }
-    e.currentTarget.classList.add('loading');
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
     try {
       const r = await api('/api/admin/shifts', { body: { installation_id: Number(fd.get('installation_id')), user_ids: ids, dates, start_time: fd.get('start_time'), end_time: fd.get('end_time') || null, note: fd.get('note') } });
       toast(`${r.created} schedule${r.created === 1 ? '' : 's'} saved — staff have been notified`); close(); onSaved?.();
-    } catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    } catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
 }
 

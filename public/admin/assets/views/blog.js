@@ -82,9 +82,9 @@ async function editor(ctx, id) {
       cover: $('[name=cover]', root).value, category: $('[data-cat]', root).value, excerpt: $('[data-excerpt]', root).value, author_name: $('[data-author]', root).value,
       slug: $('[data-slug]', root).value || undefined, seo_title: $('[data-seot]', root).value, seo_description: $('[data-seod]', root).value };
     if (!data.title) return fail('Add a title');
-    e.currentTarget.classList.add('loading');
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
     try { const r = id ? await api(`/api/admin/posts/${id}`, { method: 'PUT', body: data }) : await api('/api/admin/posts', { body: data }); toast(data.status === 'published' ? 'Published' : 'Draft saved'); location.hash = `#/blog/${r.item.id}`; if (id) editor(ctx, id); }
-    catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
   $('[data-del]')?.addEventListener('click', async () => { if (await confirmBox('Delete this article?', { danger: true, ok: 'Delete' })) { await api(`/api/admin/posts/${id}`, { method: 'DELETE' }); location.hash = '#/blog'; } });
 }

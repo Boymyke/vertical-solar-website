@@ -42,7 +42,7 @@ export default async function ({ root, user, setTitle }) {
     $('[data-cp]', el).onclick = () => copy(`Vertical Solar CRM\nLogin: ${location.origin}/admin\nEmail: ${email}\nTemporary password: ${pw}`);
   }
   $('[data-new]').onclick = () => {
-    const { el, close } = modal({ title: 'Add user', size: 'wide', body: `<form class="stack" data-f><div class="form-grid"><div class="field"><label>Full name *</label><input class="input" name="name" required></div><div class="field"><label>Work email *</label><input class="input" name="email" type="email" required></div>
+    const { el, close } = modal({ title: 'Add staff member', size: 'wide', body: `<form class="stack" data-f><div class="form-grid"><div class="field"><label>Full name *</label><input class="input" name="name" required></div><div class="field"><label>Work email *</label><input class="input" name="email" type="email" required></div>
       <div class="field"><label>Phone</label><input class="input" name="phone"></div><div class="field"><label>Job title</label><input class="input" name="job_title" placeholder="Installer, Sales rep…"></div>
       </div><div class="alert info"><i class="ri-information-line"></i><span>The first time they sign in, they choose their own password and add their photo, contact and emergency details.</span></div>
       <div><div class="label" style="margin-bottom:6px">What can they use?</div>${permGrid(['field'])}</div></form>`, footer: '<button class="btn btn-primary" data-ok><i class="ri-user-add-line"></i> Create login</button>' });

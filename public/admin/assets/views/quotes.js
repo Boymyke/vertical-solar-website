@@ -8,7 +8,7 @@ export default async function (ctx) {
   const state = { q: '', status: qs.get('status') || '' };
   setTitle('Quotes', 'Solar quotation engine — build, send as a link, and track views and acceptance', '<a class="btn btn-primary" href="#/quotes/new"><i class="ri-file-add-line"></i> New quote</a>');
   root.innerHTML = `<div class="card"><div class="toolbar"><div class="search"><i class="ri-search-line"></i><input class="input" data-q placeholder="Search quote number, title, customer"></div>
-    <div class="seg">${['', 'draft', 'sent', 'viewed', 'accepted', 'declined', 'expired'].map((s) => `<button data-s="${s}" class="${s === state.status ? 'on' : ''}">${s || 'All'}</button>`).join('')}</div></div><div data-body></div></div>`;
+    <div class="seg">${['', 'draft', 'sent', 'viewed', 'accepted', 'declined', 'expired'].map((s) => `<button data-s="${s}" class="${s === state.status ? 'on' : ''}">${s ? s[0].toUpperCase() + s.slice(1) : 'All'}</button>`).join('')}</div></div><div data-body></div></div>`;
   async function load() {
     const p = new URLSearchParams({ per: 100 }); if (state.q) p.set('q', state.q); if (state.status) p.set('status', state.status);
     const r = await api('/api/admin/quotes?' + p);
@@ -47,7 +47,7 @@ async function editor(ctx, id) {
           <div class="list card" data-cust-results hidden style="margin-top:6px;max-height:220px;overflow:auto"></div><span class="hint" data-cust-info>${customer ? `${esc(customer.phone || '')} ${esc(customer.email || '')} · ${esc(customer.city || '')}` : 'Pick who this quote is for.'}</span></div>
         <div class="field full"><label for="q-title">Project title</label><input class="input" id="q-title" value="${esc(q.title)}" placeholder="e.g. 5kVA hybrid system with 10kWh lithium — Lekki residence" required></div>
         <div class="field"><label for="q-valid">Valid until</label><input class="input" type="date" id="q-valid" value="${esc(String(q.valid_until || new Date(Date.now() + 14 * 864e5).toISOString()).slice(0, 10))}"></div>
-        <div class="field"><label for="q-status">Status</label><select class="input" id="q-status">${['draft', 'sent', 'viewed', 'accepted', 'declined', 'expired'].map((s) => `<option ${s === q.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label for="q-status">Status</label><select class="input" id="q-status">${['draft', 'sent', 'viewed', 'accepted', 'declined', 'expired'].map((s) => `<option value="${s}" ${s === q.status ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}</select></div>
       </div></div>
       <div class="card"><div class="card-h"><h2>System design</h2><select class="input" data-pkg style="width:auto;margin-left:auto"><option value="">Start from a package…</option>${pk.items.map((p) => `<option value="${p.id}">${esc(p.name)} — ${p.inverter_kva}kVA</option>`).join('')}</select>
         <select class="input" data-pkgbat style="width:auto"><option value="lead">Lead-acid price</option><option value="lithium">Lithium price</option></select></div>
@@ -129,13 +129,13 @@ async function editor(ctx, id) {
     const r = id ? await api(`/api/admin/quotes/${id}`, { method: 'PUT', body }) : await api('/api/admin/quotes', { body });
     return r.item;
   };
-  $('[data-save]', root).onclick = async (e) => { e.currentTarget.classList.add('loading'); try { const it = await save(); toast('Quote saved'); location.hash = `#/quotes/${it.id}`; if (id) editor(ctx, id); } catch (err) { fail(err); } finally { e.currentTarget?.classList.remove('loading'); } };
+  $('[data-save]', root).onclick = async (e) => { const busyBtn = e.currentTarget; busyBtn.classList.add('loading'); try { const it = await save(); toast('Quote saved'); location.hash = `#/quotes/${it.id}`; if (id) editor(ctx, id); } catch (err) { fail(err); } finally { busyBtn.classList.remove('loading'); } };
   if (!id) return;
   const link = `${location.origin}/q/${quote.token}`;
   $('[data-preview]').onclick = () => window.open(`/q/${quote.token}?preview=1`, '_blank', 'noopener');
   $('[data-dup]').onclick = async () => { const r = await api(`/api/admin/quotes/${id}/duplicate`, { method: 'POST' }); location.hash = `#/quotes/${r.id}`; };
   $('[data-del]', root).onclick = async () => { if (await confirmBox('Delete this quote permanently?', { danger: true, ok: 'Delete' })) { await api(`/api/admin/quotes/${id}`, { method: 'DELETE' }); location.hash = '#/quotes'; } };
-  $('[data-convert]', root).onclick = async () => { const r = await api(`/api/admin/quotes/${id}/convert`, { method: 'POST' }); toast('Installation created'); location.hash = `#/installations/${r.id}`; };
+  $('[data-convert]', root).onclick = async () => { try { const r = await api(`/api/admin/quotes/${id}/convert`, { method: 'POST' }); toast(r.existed ? 'This quote already has an installation — opening it' : 'Installation created'); location.hash = `#/installations/${r.id}`; } catch (err) { fail(err); } };
   $('[data-send]').onclick = async () => {
     try { await save(); await api(`/api/admin/quotes/${id}/send`, { method: 'POST' }); } catch (err) { return fail(err); }
     const cust = await api(`/api/admin/customers/${custId}`).catch(() => ({}));

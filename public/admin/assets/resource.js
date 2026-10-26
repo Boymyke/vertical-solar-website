@@ -13,11 +13,11 @@ export function editForm({ resource, title, fields, item, onSaved, size = 'wide'
     let body;
     try { body = readForm(form, fields); } catch (err) { return fail(err); }
     if (prepare) body = prepare(body, item) || body;
-    e.currentTarget.classList.add('loading');
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
     try {
       const r = item?.id ? await api(`/api/admin/${resource}/${item.id}`, { method: 'PUT', body }) : await api(`/api/admin/${resource}`, { body });
       toast('Saved'); close(); onSaved?.(r.item);
-    } catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    } catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
   $('[data-del]', el)?.addEventListener('click', async () => {
     if (!(await confirmBox(`Delete this ${title}? This cannot be undone.`, { danger: true, ok: 'Delete' }))) return;

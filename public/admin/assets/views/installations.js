@@ -101,8 +101,8 @@ async function detail(ctx, id) {
   $('[data-save]', root).onclick = async (e) => {
     if (!validate(form)) return;
     const body = readForm(form, fields); body.radius_m = Number(body.radius_m) || 150;
-    e.currentTarget.classList.add('loading');
-    try { await api(`/api/admin/installations/${id}`, { method: 'PUT', body }); toast('Saved'); detail(ctx, id); } catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+    const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
+    try { await api(`/api/admin/installations/${id}`, { method: 'PUT', body }); toast('Saved'); detail(ctx, id); } catch (err) { fail(err); busyBtn.classList.remove('loading'); }
   };
   $('[data-complete]', root)?.addEventListener('click', async () => { if (!(await confirmBox('Mark this installation as completed? Warranty, maintenance schedule and a check-in follow-up will be created.', { ok: 'Complete job' }))) return; await api(`/api/admin/installations/${id}`, { method: 'PUT', body: { status: 'completed' } }); toast('Job completed'); detail(ctx, id); });
   $('[data-del]', root).onclick = async () => { if (await confirmBox('Delete this installation and its attendance/report records?', { danger: true, ok: 'Delete' })) { await api(`/api/admin/installations/${id}`, { method: 'DELETE' }); location.hash = '#/installations'; } };

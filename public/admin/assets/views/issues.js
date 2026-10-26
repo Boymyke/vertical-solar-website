@@ -36,9 +36,9 @@ export default async function ({ root, params, setTitle }) {
       footer: `<button class="btn" data-x2>Cancel</button><button class="btn btn-primary" data-ok>${status === 'resolved' ? 'Resolve' : 'Mark as seen'}</button>` });
     $('[data-x2]', el).onclick = close;
     $('[data-ok]', el).onclick = async (e) => {
-      e.currentTarget.classList.add('loading');
+      const busyBtn = e.currentTarget; busyBtn.classList.add('loading');
       try { await api(`/api/admin/issues/${id}`, { method: 'PUT', body: { status, response: $('#is-r', el).value } }); toast(status === 'resolved' ? 'Resolved — staff member notified' : 'Marked as seen'); close(); load(); }
-      catch (err) { fail(err); e.currentTarget.classList.remove('loading'); }
+      catch (err) { fail(err); busyBtn.classList.remove('loading'); }
     };
   }
   root.addEventListener('click', (e) => {

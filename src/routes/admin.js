@@ -64,7 +64,7 @@ export function registerAdmin(r) {
       all(`SELECT id, name, stock, reorder_level, unit FROM products WHERE active=1 AND reorder_level > 0 AND stock <= reorder_level ORDER BY stock - reorder_level, name LIMIT 3`),
       all(`SELECT s.id, s.urgency, s.category, s.message, s.created_at, u.name user_name, i.title site FROM site_issues s JOIN users u ON u.id=s.user_id LEFT JOIN installations i ON i.id=s.installation_id WHERE s.status != 'resolved' ORDER BY CASE s.urgency WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, s.id DESC LIMIT 4`),
       all(`SELECT s.id, s.status, s.starts_at, s.late_minutes, u.name user_name, i.title site FROM shifts s JOIN users u ON u.id=s.user_id JOIN installations i ON i.id=s.installation_id
-        WHERE s.status != 'cancelled' AND s.starts_at >= datetime('now','start of day','-1 hours') AND s.starts_at < datetime('now','start of day','+23 hours') ORDER BY s.starts_at LIMIT 8`),
+        WHERE s.status != 'cancelled' AND s.starts_at >= datetime('now','+1 hours','start of day','-1 hours') AND s.starts_at < datetime('now','+1 hours','start of day','+23 hours') ORDER BY s.starts_at LIMIT 8`),
     ]);
     const pct = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : a ? 100 : 0);
     return json({
@@ -161,10 +161,17 @@ export function registerAdmin(r) {
     if (target.id === ctx.user.id && 'active' in b && !bool(b.active)) fail(400, 'You cannot deactivate yourself');
     const data = {};
     if ('name' in b) data.name = str(b.name, 120);
-    if ('email' in b) { if (!isEmail(b.email)) fail(400, 'Invalid email'); data.email = str(b.email, 160).toLowerCase(); }
+    if ('email' in b) {
+      if (!isEmail(b.email)) fail(400, 'Enter a valid email address');
+      data.email = str(b.email, 160).toLowerCase();
+      if (await env.DB.prepare('SELECT id FROM users WHERE email=? AND id!=?').bind(data.email, id).first()) fail(409, 'Another login already uses this email');
+    }
     if ('phone' in b) data.phone = normPhone(b.phone);
     if ('job_title' in b) data.job_title = str(b.job_title, 80);
-    if ('permissions' in b && target.role !== 'owner') data.permissions = JSON.stringify(sanitizePerms(ctx.user, b.permissions));
+    if ('permissions' in b && target.role !== 'owner') {
+      const next = JSON.stringify(sanitizePerms(ctx.user, b.permissions));
+      if (next !== target.permissions) data.permissions = next; // only a real change signs them out
+    }
     if ('active' in b && target.role !== 'owner') data.active = bool(b.active);
     data.updated_at = now();
     const keys = Object.keys(data);
@@ -298,6 +305,7 @@ export function registerAdmin(r) {
       value_estimate: 'num', assigned_to: 'int', tags: 'json', notes: 'text', next_followup_at: 'date',
     },
     json: ['tags'], required: ['name'],
+    beforeDelete: (_row, { ctx }) => { if (ctx.user.role !== 'owner') fail(403, 'Only the administrator can delete customers'); },
     search: ['customers.name', 'customers.phone', 'customers.email', 'customers.company', 'customers.city'],
     filters: ['customers.stage', 'customers.status', 'customers.segment', 'customers.source', 'customers.assigned_to'],
     beforeSave: async (d, { existing, ctx, env }) => {
@@ -366,7 +374,7 @@ export function registerAdmin(r) {
     listHook: (u, where, args, ctx) => {
       const due = u.searchParams.get('due');
       if (due === 'overdue') where.push("followups.status='pending' AND followups.due_at < datetime('now')");
-      if (due === 'today') where.push("followups.status='pending' AND date(followups.due_at) = date('now')");
+      if (due === 'today') where.push("followups.status='pending' AND date(followups.due_at,'+1 hours') = date('now','+1 hours')");
       if (due === 'week') where.push("followups.status='pending' AND followups.due_at <= datetime('now','+7 days')");
       if (u.searchParams.get('mine') === '1') { where.push('followups.assigned_to = ?'); args.push(ctx.user.id); }
     },
@@ -421,7 +429,9 @@ export function registerAdmin(r) {
     if (q.customer_id) {
       await env.DB.prepare(`UPDATE customers SET stage=CASE WHEN stage IN ('new','contacted','site_survey') THEN 'quoted' ELSE stage END, last_contacted_at=?, updated_at=? WHERE id=?`).bind(now(), now(), q.customer_id).run();
       await env.DB.prepare(`INSERT INTO activities (customer_id, user_id, type, body) VALUES (?,?, 'system', ?)`).bind(q.customer_id, ctx.user.id, `Quote ${q.number} sent`).run();
-      await env.DB.prepare(`INSERT INTO followups (customer_id, assigned_to, type, title, due_at, auto, created_by) VALUES (?,?, 'quote', ?, datetime('now','+3 days'), 1, ?)`)
+      // One chase reminder per quote: sending again (e.g. by another channel) doesn't add duplicates.
+      const pending = await env.DB.prepare(`SELECT id FROM followups WHERE customer_id=? AND type='quote' AND title=? AND status='pending'`).bind(q.customer_id, `Chase quote ${q.number}`).first();
+      if (!pending) await env.DB.prepare(`INSERT INTO followups (customer_id, assigned_to, type, title, due_at, auto, created_by) VALUES (?,?, 'quote', ?, datetime('now','+3 days'), 1, ?)`)
         .bind(q.customer_id, ctx.user.id, `Chase quote ${q.number}`, ctx.user.id).run();
     }
     return ok({ link: `/q/${q.token}` });
@@ -441,6 +451,9 @@ export function registerAdmin(r) {
     requirePerm(ctx.user, 'quotes', 'installations');
     const q = await env.DB.prepare('SELECT q.*, c.address, c.lat, c.lng, c.city FROM quotes q LEFT JOIN customers c ON c.id=q.customer_id WHERE q.id=?').bind(id).first();
     if (!q) fail(404, 'Quote not found');
+    // Converting twice opens the job that already exists instead of making a duplicate.
+    const existing = await env.DB.prepare('SELECT id FROM installations WHERE quote_id=? ORDER BY id LIMIT 1').bind(q.id).first();
+    if (existing) return ok({ id: existing.id, existed: true });
     const row = await env.DB.prepare(`INSERT INTO installations (customer_id, quote_id, title, address, lat, lng, system, status, created_by) VALUES (?,?,?,?,?,?,?, 'scheduled', ?) RETURNING id`)
       .bind(q.customer_id, q.id, q.title, [q.address, q.city].filter(Boolean).join(', ') || null, q.lat, q.lng, q.system, ctx.user.id).first();
     return ok({ id: row.id });

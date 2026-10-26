@@ -13,7 +13,7 @@ export default async function (ctx) {
     const { el, close } = modal({ title: 'New support ticket', size: 'wide', body: `<form data-f>${formHtml(fields, { priority: 'normal', category: 'fault' })}</form>`, footer: '<button class="btn btn-primary" data-ok>Create ticket</button>' });
     $('[data-ok]', el).onclick = async () => { const f = $('[data-f]', el); if (!validate(f)) return; const b = readForm(f, fields); if (!b.assigned_to) b.assigned_to = null; try { const r = await api('/api/admin/tickets', { body: b }); close(); location.hash = `#/support/${r.item.id}`; } catch (err) { fail(err); } };
   };
-  root.innerHTML = `<div class="grid g-12"><div class="card"><div class="toolbar"><div class="seg">${['open', 'pending', 'resolved', ''].map((s) => `<button data-s="${s}" class="${s === 'open' ? 'on' : ''}">${s || 'All'}</button>`).join('')}</div></div><div class="list" data-list style="max-height:72vh;overflow:auto"></div></div><div data-detail><div class="card empty"><i class="ri-customer-service-2-line"></i>Select a ticket.</div></div></div>`;
+  root.innerHTML = `<div class="grid g-12"><div class="card"><div class="toolbar"><div class="seg">${['open', 'pending', 'resolved', ''].map((s) => `<button data-s="${s}" class="${s === 'open' ? 'on' : ''}">${s ? s[0].toUpperCase() + s.slice(1) : 'All'}</button>`).join('')}</div></div><div class="list" data-list style="max-height:72vh;overflow:auto"></div></div><div data-detail><div class="card empty"><i class="ri-customer-service-2-line"></i>Select a ticket.</div></div></div>`;
   let status = 'open';
   async function load() {
     const r = await api(`/api/admin/tickets?per=200${status ? '&status=' + status : ''}`);
@@ -35,7 +35,7 @@ export default async function (ctx) {
           <button class="btn btn-primary" type="submit">Add update</button></div>
           <p class="muted small" style="margin:0">Updates are recorded here. Contact the customer by phone/WhatsApp, or send an email from the Email page.</p></form>
         <div class="form-grid"><div class="field"><label>Assigned to</label><select class="input" data-assign><option value="">Unassigned</option>${users.map((u) => `<option value="${u.id}" ${u.id === t.assigned_to ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>Priority</label><select class="input" data-prio>${['low', 'normal', 'high', 'urgent'].map((p) => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select></div></div>
+        <div class="field"><label>Priority</label><select class="input" data-prio>${['low', 'normal', 'high', 'urgent'].map((p) => `<option value="${p}" ${p === t.priority ? 'selected' : ''}>${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}</select></div></div>
       </div></div>`;
     $('[data-reply]', root).onsubmit = async (e) => { e.preventDefault(); const fd = new FormData(e.target); try { await api(`/api/admin/tickets/${id}/replies`, { body: { body: fd.get('body'), internal: !!fd.get('internal'), status: fd.get('status') || undefined } }); toast('Saved'); detail(id); load(); } catch (err) { fail(err); } };
     $('[data-assign]', root).onchange = (e) => api(`/api/admin/tickets/${id}`, { method: 'PUT', body: { assigned_to: e.target.value || null } }).then(() => toast('Assigned'));

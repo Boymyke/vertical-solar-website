@@ -42,7 +42,7 @@ export default async function () {
   $('[data-quote-actions]').hidden = false;
   $('[data-q-status]').textContent = q.status;
   $('[data-print]').addEventListener('click', () => print());
-  $('[data-pdf]').addEventListener('click', async (e) => { e.currentTarget.classList.add('is-loading'); await downloadPdf($('#quote-doc'), `Vertical-Solar-${q.number}.pdf`); e.currentTarget.classList.remove('is-loading'); });
+  $('[data-pdf]').addEventListener('click', async (e) => { const b = e.currentTarget; b.classList.add('is-loading'); try { await downloadPdf($('#quote-doc'), `Vertical-Solar-${q.number}.pdf`); } finally { b.classList.remove('is-loading'); } });
   if (['sent', 'viewed'].includes(q.status)) {
     $('[data-respond]').hidden = false;
     const form = $('[data-respond-form]'), st = $('.form-status', form);

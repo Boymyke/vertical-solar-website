@@ -319,6 +319,9 @@ export function registerPublic(r) {
     if (q.customer_id) {
       await env.DB.prepare(`INSERT INTO activities (customer_id, type, body) VALUES (?, 'system', ?)`).bind(q.customer_id, `Quote ${q.number} ${action} online${name ? ' by ' + name : ''}`).run();
       if (action === 'accepted') await env.DB.prepare(`UPDATE customers SET stage='won', status='customer', updated_at=? WHERE id=?`).bind(now(), q.customer_id).run();
+      // The customer has answered, so the "chase this quote" reminder is no longer needed.
+      await env.DB.prepare(`UPDATE followups SET status='done', completed_at=?, outcome=? WHERE customer_id=? AND title=? AND status='pending'`)
+        .bind(now(), `Customer ${action} the quote online`, q.customer_id, `Chase quote ${q.number}`).run();
     }
     await notify(env, { module: 'quotes', type: action === 'accepted' ? 'success' : 'warning', title: `Quote ${q.number} ${action}`, body: name || '', link: `/admin/#/quotes/${q.id}` });
     return ok({ status: action });
