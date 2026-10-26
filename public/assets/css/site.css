@@ -200,7 +200,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .mobile-only-cta { display: none; }
 html:not([data-shop="on"]) [data-shop-link], [data-shop-link][hidden] { display: none !important; }
-html[data-shop="off"] [data-cart-link], [data-cart-link][hidden] { display: none !important; }
+/* The cart icon in the header only shows while the shop is switched on. Private-link shoppers use the cart button inside the shop. */
+html:not([data-shop="on"]) [data-cart-link], [data-cart-link][hidden] { display: none !important; }
+.shop-cart-btn { flex-shrink: 0; position: relative; }
+.shop-cart-btn .badge-dot { position: static; margin-left: 2px; }
 html:has(.main-nav.open) :is(.fab-stack, .fab-a11y, .consent) { display: none; }
 @media (max-width: 560px) { .header-tools .lang-select { display: none; } .logo svg { height: 38px; } .main-nav .lang-select-mobile { display: block !important; margin-top: 12px; } .main-nav .lang-select-mobile select { width: 100%; min-height: 50px; font-size: var(--fs-2); } :root { --header-h: 72px; } .theme-btn { width: 40px; height: 40px; } .header-tools { gap: 4px; } }
 .lang-select-mobile { display: none; }

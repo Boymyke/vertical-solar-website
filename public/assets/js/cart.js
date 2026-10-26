@@ -61,14 +61,15 @@ function render() {
   $('[data-subtotal]', drawer).textContent = naira(cartTotal());
 }
 
-// 'on' = public shop; 'private' = shop is off but this visitor opened the private link (cart works, menu link stays hidden).
+// 'on' = public shop; 'private' = shop is off but this visitor opened the private link: the shop pages and cart work,
+// but nothing about the shop (menu link, header cart icon) appears on the rest of the website.
 export const privateShop = () => /(?:^|;\s*)vs_shop=/.test(document.cookie);
 export function initCart(shopEnabled) {
   const mode = shopEnabled ? 'on' : privateShop() ? 'private' : 'off';
   document.documentElement.dataset.shop = mode;
   try { localStorage.setItem('vs-shop', shopEnabled ? 'on' : 'off'); } catch {}
   $$('[data-shop-link]').forEach((el) => (el.hidden = !shopEnabled));
-  $$('[data-cart-link]').forEach((el) => (el.hidden = mode === 'off'));
+  $$('[data-cart-link]').forEach((el) => (el.hidden = mode !== 'on'));
   render();
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-open-cart]')) { e.preventDefault(); openCart(true); }
