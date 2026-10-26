@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 40" width="130" height="40" role="img" aria-label="MERIDIA Plaza">
+<g><path d="M20 4l16 28H4z" fill="#6A3FA0"/><path d="M20 16l8 14H12z" fill="#fff" opacity=".9"/></g>
+<text x="46" y="20" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#1D2A22">MERIDIA</text>
+<text x="46.5" y="34" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="10" font-weight="600" letter-spacing="2.4" fill="#6A3FA0">PLAZA</text>
+</svg>

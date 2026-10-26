@@ -146,17 +146,43 @@ export function registerStaff(r) {
     if (!userIds.length) fail(400, 'Choose at least one staff member');
     if (!dates.length || !start) fail(400, 'Choose the date and the time they should be on site');
     if (end && end <= start) fail(400, 'The finish time must be later than the start time');
-    const stmts = [];
+    // Clashes: the same person already expected somewhere (or here) at an overlapping time that day.
+    // Without "force" the office sees the list first; exact repeats on this job are never doubled.
+    const toMs = (sql) => Date.parse(sql.replace(' ', 'T') + 'Z');
+    const span = (st, en) => [toMs(st), en ? toMs(en) : toMs(st) + 8 * 3600e3];
+    const lo = lagosToUtc(dates.reduce((m, x) => (x < m ? x : m)), '00:00'), hi = lagosToUtc(dates.reduce((m, x) => (x > m ? x : m)), '23:59');
+    const { results: existing } = await env.DB.prepare(`SELECT s.id, s.user_id, s.installation_id, s.starts_at, s.ends_at, u.name user_name, i.title site
+      FROM shifts s JOIN users u ON u.id=s.user_id JOIN installations i ON i.id=s.installation_id
+      WHERE s.status != 'cancelled' AND s.user_id IN (${userIds.map(() => '?').join(',')}) AND s.starts_at >= datetime(?, '-1 day') AND s.starts_at <= ?`)
+      .bind(...userIds, lo, hi).all();
+    const clashes = [], skip = new Set();
     for (const d of dates) for (const uid of userIds) {
+      const [a0, a1] = span(lagosToUtc(d, start), end ? lagosToUtc(d, end) : null);
+      for (const x of existing) {
+        if (x.user_id !== uid) continue;
+        const [b0, b1] = span(x.starts_at, x.ends_at);
+        if (a0 < b1 && b0 < a1) {
+          if (x.installation_id === inst.id && b0 === a0) { skip.add(`${d}|${uid}`); continue; }
+          clashes.push({ user_id: uid, user_name: x.user_name, date: d, site: x.site, same_job: x.installation_id === inst.id, start: utcToLagosHm(x.starts_at), end: x.ends_at ? utcToLagosHm(x.ends_at) : null });
+        }
+      }
+    }
+    if (clashes.length && !b.force) return json({ error: 'Some of these people are already expected somewhere at that time.', clashes }, 409);
+    const stmts = [];
+    let made = 0;
+    for (const d of dates) for (const uid of userIds) {
+      if (skip.has(`${d}|${uid}`)) continue;
+      made++;
       stmts.push(env.DB.prepare('INSERT INTO shifts (installation_id, user_id, starts_at, ends_at, note, created_by) VALUES (?,?,?,?,?,?)')
         .bind(inst.id, uid, lagosToUtc(d, start), end ? lagosToUtc(d, end) : null, str(b.note, 300), ctx.user.id));
       stmts.push(env.DB.prepare('INSERT OR IGNORE INTO installation_staff (installation_id, user_id) VALUES (?,?)').bind(inst.id, uid));
     }
+    if (!made) return ok({ created: 0, skipped: skip.size });
     await env.DB.batch(stmts);
     const when = dates.length === 1 ? `${dates[0]} at ${start}` : `${dates.length} days from ${dates[0]}, ${start}`;
     for (const uid of userIds) await notify(env, { userId: uid, type: 'info', title: `You're scheduled at ${inst.title}`, body: `Be on site ${when}.${b.note ? ' ' + str(b.note, 120) : ''}`, link: '/staff/#/field' });
     await audit(env, req, ctx.user, 'shifts_created', 'installations', inst.id, { users: userIds.length, dates: dates.length });
-    return ok({ created: dates.length * userIds.length });
+    return ok({ created: made, skipped: skip.size });
   });
 
   r.put('/api/admin/shifts/:id', async (req, env, { id }, ctx) => {

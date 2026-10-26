@@ -27,19 +27,32 @@ function plain(text) {
   return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_#>`]/g, '').replace(/₦/g, 'naira ').trim();
 }
 
+// Old saved chats may end with the button label ("Listen", "Pause"…) — strip it so it is never shown twice.
+const cleanSaved = (t) => String(t || '').replace(/(\s*(Listen|Pause|Resume|Loading…))+\s*$/, '');
+
 function addMsg(role, text, { speakable = true, raw = false } = {}) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
+  div.dataset.raw = text;
   // Visitor messages and AI/agent replies are already in the visitor's language — never re-translate them.
   if (role === 'user' || raw) div.setAttribute('translate', 'no');
+  let node = div;
   if (role === 'user') div.textContent = text;
   else {
     const { html, links } = md(text);
-    div.innerHTML = html + (links.length ? `<div class="links">${links.map((l) => `<a href="${l.url}"><i class="ri-arrow-right-up-line" aria-hidden="true"></i>${l.label}</a>`).join('')}</div>` : '') +
-      (speakable && ('speechSynthesis' in window || site?.voice?.natural) ? `<button class="speak" type="button"><i class="ri-volume-up-line" aria-hidden="true"></i> Listen</button>` : '');
-    div.querySelector('.speak')?.addEventListener('click', (e) => togglePlay(e.currentTarget, text));
+    div.innerHTML = html + (links.length ? `<div class="links">${links.map((l) => `<a href="${l.url}"><i class="ri-arrow-right-up-line" aria-hidden="true"></i>${l.label}</a>`).join('')}</div>` : '');
+    // The Listen button sits under the bubble, not inside it.
+    if (speakable && ('speechSynthesis' in window || site?.voice?.natural)) {
+      node = document.createElement('div');
+      node.className = 'msg-row';
+      const btn = document.createElement('button');
+      btn.className = 'speak'; btn.type = 'button';
+      btn.innerHTML = '<i class="ri-volume-up-line" aria-hidden="true"></i> Listen';
+      btn.addEventListener('click', (e) => togglePlay(e.currentTarget, text));
+      node.append(div, btn);
+    }
   }
-  log.appendChild(div);
+  log.appendChild(node);
   log.scrollTop = log.scrollHeight;
   return div;
 }
@@ -144,7 +157,7 @@ async function send(text, mode = 'text') {
 }
 
 function saveHistory() {
-  const items = [...log.querySelectorAll('.msg:not(.typing)')].slice(-30).map((m) => ({ r: m.classList.contains('user') ? 'user' : m.classList.contains('agent') ? 'agent' : 'bot', t: m.dataset.raw || m.innerText.replace(/\nListen$/, '') }));
+  const items = [...log.querySelectorAll('.msg:not(.typing)')].slice(-30).map((m) => ({ r: m.classList.contains('user') ? 'user' : m.classList.contains('agent') ? 'agent' : 'bot', t: m.dataset.raw || cleanSaved(m.innerText) }));
   try { sessionStorage.setItem('vs-chat-log', JSON.stringify(items)); } catch {}
 }
 
@@ -312,7 +325,7 @@ function build() {
 
   let restored = [];
   try { restored = JSON.parse(sessionStorage.getItem('vs-chat-log') || '[]'); } catch {}
-  if (restored.length) { restored.forEach((m) => addMsg(m.r === 'user' ? 'user' : 'bot', m.t, { speakable: m.r !== 'user', raw: true })); chips.remove(); }
+  if (restored.length) { restored.forEach((m) => addMsg(m.r === 'user' ? 'user' : 'bot', cleanSaved(m.t), { speakable: m.r !== 'user', raw: true })); chips.remove(); }
   else addMsg('bot', site?.ai?.greeting || "Hi, I'm Vola. Ask me about solar packages, prices, financing or caring for your system.", { speakable: false });
 }
 

@@ -152,7 +152,7 @@ function restore() {
 async function load(code) {
   if (code === 'en') return {};
   if (!dicts[code]) {
-    dicts[code] = fetch(`/assets/i18n/${code}.json?v=6`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
+    dicts[code] = fetch(`/assets/i18n/${code}.json?v=7`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((d) => {
       try { Object.assign(d, JSON.parse(localStorage.getItem(`vs-mt-${code}`) || '{}')); } catch {}
       return d;
     });

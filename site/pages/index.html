@@ -7,7 +7,7 @@
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-scene">
     <div class="scene-layer scene-day"><picture><source type="image/webp" srcset="/images/hero/home-day-768.webp 768w, /images/hero/home-day-1280.webp 1280w, /images/hero/home-day-1920.webp 1920w, /images/hero/home-day-3072.webp 3072w" sizes="(max-aspect-ratio: 3/2) 150svh, 100vw"><img src="/images/hero/home-day-1920.webp" alt="A Lagos home with rooftop solar panels in the midday sun" width="3072" height="2048" fetchpriority="high" decoding="async"></picture></div>
-    <div class="scene-layer scene-night" aria-hidden="true"><picture><source type="image/webp" srcset="/images/hero/home-night-768.webp 768w, /images/hero/home-night-1280.webp 1280w, /images/hero/home-night-1920.webp 1920w, /images/hero/home-night-3072.webp 3072w" sizes="(max-aspect-ratio: 3/2) 150svh, 100vw"><img src="/images/hero/home-night-1920.webp" alt="" width="3072" height="2048" decoding="async" data-night-img></picture></div>
+    <div class="scene-layer scene-night" aria-hidden="true"><picture><source type="image/webp" srcset="/images/hero/home-night2-768.webp 768w, /images/hero/home-night2-1280.webp 1280w, /images/hero/home-night2-1920.webp 1920w, /images/hero/home-night2-3072.webp 3072w" sizes="(max-aspect-ratio: 3/2) 150svh, 100vw"><img src="/images/hero/home-night2-1920.webp" alt="" width="3072" height="2048" decoding="async" data-night-img></picture></div>
     <div class="scene-shade" aria-hidden="true"></div>
   </div>
   <div class="wrap hero-content">
@@ -20,10 +20,10 @@
   </div>
   <div class="wrap">
     <div class="hero-stats" data-stats>
-      <div><strong>10+</strong><span>Years of experience</span></div>
-      <div><strong>500+</strong><span>Installations completed</span></div>
-      <div><strong>98%</strong><span>Client satisfaction</span></div>
-      <div><strong>24/7</strong><span>Support &amp; monitoring</span></div>
+      <div><strong translate="no">10+</strong><span>Years of experience</span></div>
+      <div><strong translate="no">500+</strong><span>Installations completed</span></div>
+      <div><strong translate="no">98%</strong><span>Client satisfaction</span></div>
+      <div><strong translate="no">24/7</strong><span>Support &amp; monitoring</span></div>
     </div>
   </div>
 </section>
@@ -93,11 +93,10 @@
   </div>
 </section>
 
-<section class="section" aria-labelledby="process-title">
-  <div class="wrap">
+<section class="process-pin" aria-labelledby="process-title" data-steps-pin>
+  <div class="pin-stage"><div class="wrap">
     <div class="head-split center">
       <h2 id="process-title" data-i18n="home.proc.title">From first call to first sunrise</h2>
-      <p data-i18n="home.proc.sub">Most home systems are installed within a week of approval. Here is exactly what happens.</p>
     </div>
     <div class="steps-progress" aria-hidden="true"><span class="steps-progress-bar"></span><i></i><i></i><i></i><i></i></div>
     <ol class="steps4" data-steps>
@@ -142,7 +141,7 @@
         </div>
       </li>
     </ol>
-  </div>
+  </div></div>
 </section>
 
 <section class="section section-alt" id="estimate" aria-labelledby="est-title">
@@ -198,13 +197,6 @@
       <div><p data-i18n="home.proj.sub">Real sites, real numbers. Every project below was designed and installed by our team.</p><a class="btn btn-light" href="/projects" data-i18n="home.proj.all">See all projects</a></div>
     </div>
     <div class="grid-3" data-projects data-limit="3"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
-    <div class="dark-split" role="region" aria-labelledby="t-title">
-      <div class="head-split">
-        <h2 id="t-title" data-i18n="home.t.title">What our customers say</h2>
-        <div><p data-i18n="home.t.sub">Reviews from verified customers, with photos of the systems we installed for them.</p><a class="btn btn-light" href="/testimonials" data-i18n="home.t.all">Read all reviews</a></div>
-      </div>
-      <div class="grid-3" data-testimonials data-limit="3" data-fallback="cta"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
-    </div>
   </div>
 </section>
 
@@ -229,6 +221,16 @@
         <p data-i18n="home.fin.sub">With Power-as-a-Product, your solar system pays for itself from the fuel and grid bills you no longer have. Pay in full and save more.</p></div>
       <div class="btn-row"><a class="btn btn-accent" href="/financing" data-i18n="home.fin.cta">See financing options</a><a class="btn btn-light" data-open-chat href="#"><i class="ri-chat-smile-3-line" aria-hidden="true"></i><span data-i18n="home.fin.ask">Ask Vola</span></a></div>
     </div>
+  </div>
+</section>
+
+<section class="section section-dark" aria-labelledby="t-title" data-testimonials-section>
+  <div class="wrap">
+    <div class="head-split">
+      <h2 id="t-title" data-i18n="home.t.title">What our customers say</h2>
+      <div><p data-i18n="home.t.sub">Reviews from verified customers, with photos of the systems we installed for them.</p><a class="btn btn-light" href="/testimonials" data-i18n="home.t.all">Read all reviews</a></div>
+    </div>
+    <div class="grid-3" data-testimonials data-limit="3" data-fallback="cta"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
   </div>
 </section>
 

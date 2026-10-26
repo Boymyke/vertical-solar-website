@@ -18,7 +18,7 @@
 <link rel="preload" href="/assets/fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 
 <link rel="stylesheet" href="/assets/vendor/remixicon/remixicon.css">
-<link rel="stylesheet" href="/assets/css/site.css?v=mvp5feeq">
+<link rel="stylesheet" href="/assets/css/site.css?v=mvpf0vwl">
 
 <script src="/assets/js/theme-init.js"></script>
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://verticalsolar.com.ng/#org","name":"Vertical Solar","legalName":"Vertical Energy & Networks Ltd","url":"https://verticalsolar.com.ng","logo":"https://verticalsolar.com.ng/assets/img/logo-mark.png","foundingDate":"2017","email":"Verticalenergy.ng@gmail.com","sameAs":["https://www.facebook.com/share/1PF9JWuVoi/","https://www.instagram.com/verticalsolarnigeria/","https://www.linkedin.com/company/vertical-solar/","https://www.tiktok.com/@verticalsolar"],"contactPoint":[{"@type":"ContactPoint","telephone":"+234-818-631-1330","contactType":"sales","areaServed":"NG","availableLanguage":["English","Igbo","Hausa","Yoruba"]}]},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://verticalsolar.com.ng/"},{"@type":"ListItem","position":2,"name":"Reviews","item":"https://verticalsolar.com.ng/testimonials"}]}]}</script>
@@ -53,8 +53,8 @@
     <div class="header-tools">
       <div class="lang-select"><label class="sr-only" for="lang">Language</label>
         <select id="lang" data-lang-select title="Language"><option value="en">EN</option><option value="pcm">Pidgin</option><option value="ig">Igbo</option><option value="ha">Hausa</option><option value="yo">Yorùbá</option></select></div>
-      <div class="theme-switch" role="group" aria-label="Day or night mode"><button type="button" data-set-theme="day" aria-pressed="true" aria-label="Day mode" title="Day mode"><i class="ri-sun-line" aria-hidden="true"></i></button><button type="button" data-set-theme="night" aria-pressed="false" aria-label="Night mode" title="Night mode"><i class="ri-moon-clear-line" aria-hidden="true"></i></button></div>
-      <a class="icon-btn" href="/checkout" data-open-cart data-shop-link aria-label="Shopping cart"><i class="ri-shopping-bag-3-line" aria-hidden="true"></i><span class="badge-dot" data-cart-count hidden>0</span></a>
+      <button type="button" class="icon-btn theme-btn" data-theme-toggle aria-label="Switch to night mode" title="Switch to night mode"><i class="ri-moon-clear-line" aria-hidden="true"></i></button>
+      <a class="icon-btn" href="/checkout" data-open-cart data-cart-link aria-label="Shopping cart"><i class="ri-shopping-bag-3-line" aria-hidden="true"></i><span class="badge-dot" data-cart-count hidden>0</span></a>
       <a class="btn btn-primary btn-sm header-cta" href="/get-quote" data-i18n="cta.quote">Get a free quote</a>
       <button class="icon-btn menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="main-nav"><i class="ri-menu-3-line" aria-hidden="true"></i></button>
     </div>
@@ -74,11 +74,28 @@
     <div class="grid-3" data-testimonials><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
   </div>
 </section>
-<section class="section-tight">
-  <div class="wrap-narrow card" style="text-align:center">
-    <h2 style="font-size:var(--fs-4)">Are you a Vertical Solar customer?</h2>
-    <p class="muted">We would love to hear how your system is doing. Send us your review and a photo of your installation.</p>
-    <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" data-whatsapp="Hello Vertical Solar, I'd like to share a review of my installation." href="#"><i class="ri-whatsapp-line" aria-hidden="true"></i> Share your review</a></div>
+<section class="section-tight" id="review" aria-labelledby="review-title">
+  <div class="wrap-narrow card review-card">
+    <h2 id="review-title">Share your review</h2>
+    <p class="muted">Had a system installed by us? Tell other customers how it is going. Our team reads every review before it appears on the website.</p>
+    <form class="form" data-form="review" data-success="replace" data-success-title="Thank you for your review">
+      <fieldset class="stars-field">
+        <legend>Your rating</legend>
+        <div class="stars" role="radiogroup" aria-label="Rating out of 5">
+          <input type="radio" id="rv-5" name="rating" value="5" required><label for="rv-5" title="5 stars — Excellent"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">5 stars</span></label>
+          <input type="radio" id="rv-4" name="rating" value="4"><label for="rv-4" title="4 stars — Good"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">4 stars</span></label>
+          <input type="radio" id="rv-3" name="rating" value="3"><label for="rv-3" title="3 stars — Okay"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">3 stars</span></label>
+          <input type="radio" id="rv-2" name="rating" value="2"><label for="rv-2" title="2 stars — Poor"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">2 stars</span></label>
+          <input type="radio" id="rv-1" name="rating" value="1"><label for="rv-1" title="1 star — Bad"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">1 star</span></label>
+        </div>
+      </fieldset>
+      <div class="form-row"><div class="field"><label for="rv-name">Your name</label><input id="rv-name" name="name" required maxlength="120" autocomplete="name"></div><div class="field"><label for="rv-loc">Area or city <span class="opt">(optional)</span></label><input id="rv-loc" name="location" maxlength="120" placeholder="e.g. Lekki, Lagos"></div></div>
+      <div class="form-row"><div class="field"><label for="rv-phone">Phone or email <span class="opt">(not shown)</span></label><input id="rv-phone" name="contact" maxlength="160" autocomplete="tel" placeholder="So we can match your installation"></div><div class="field"><label for="rv-sys">System installed <span class="opt">(optional)</span></label><input id="rv-sys" name="system" maxlength="200" placeholder="e.g. 5kVA with lithium battery"></div></div>
+      <div class="field"><label for="rv-msg">Your review</label><textarea id="rv-msg" name="quote" required minlength="20" maxlength="2000" placeholder="How has the system worked for you? What changed at home or at work?"></textarea></div>
+      <label class="check"><input type="checkbox" name="consent" value="1" required> <span>Vertical Solar may publish my review with my first name and area on this website.</span></label>
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button class="btn btn-primary" type="submit"><i class="ri-send-plane-line" aria-hidden="true"></i> Send review</button>
+    </form>
   </div>
 </section>
 </main>
@@ -141,7 +158,7 @@
     <div class="footer-bottom">
       <span>© <span data-year></span> Vertical Energy &amp; Networks Ltd. <span data-i18n="footer.rights">All rights reserved.</span></span>
       <nav aria-label="Legal">
-        <a href="/privacy" data-i18n="footer.privacy">Privacy</a><a href="/terms" data-i18n="footer.terms">Terms</a><a href="/installation-policy" data-i18n="footer.install">Installation policy</a><a href="/support-policy" data-i18n="footer.support">Support policy</a><a href="/accessibility" data-i18n="footer.a11y">Accessibility</a><a href="/sitemap.xml">Sitemap</a>
+        <a href="/privacy" data-i18n="footer.privacy">Privacy</a><a href="/terms" data-i18n="footer.terms">Terms</a><a href="/installation-policy" data-i18n="footer.install">Installation policy</a><a href="/support-policy" data-i18n="footer.support">Support policy</a><a href="/accessibility" data-i18n="footer.a11y">Accessibility</a>
       </nav>
     </div>
   </div>
@@ -151,6 +168,6 @@
 </div>
 
 
-<script type="module" src="/assets/js/app.js?v=mvp5feeq"></script>
+<script type="module" src="/assets/js/app.js?v=mvpf0vwl"></script>
 </body>
 </html>

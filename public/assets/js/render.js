@@ -79,9 +79,9 @@ export async function fillBlocks(site) {
     const list = items.slice(0, Number(el.dataset.limit || 99));
     const section = el.closest('[data-testimonials-section]');
     if (!list.length) {
-      if (section) { section.hidden = true; return; }
+      if (section && el.dataset.fallback !== 'cta') { section.hidden = true; return; }
       el.innerHTML = el.dataset.fallback === 'cta'
-        ? `<div class="t-empty"><i class="ri-chat-quote-line" aria-hidden="true"></i><div><strong>Reviews from our customers are being added.</strong><p>Had a system installed by us? We would love to hear how it is going.</p></div><a class="btn btn-accent" href="/contact">Share your experience</a></div>`
+        ? `<div class="t-empty"><i class="ri-chat-quote-line" aria-hidden="true"></i><div><strong>Reviews from our customers are being added.</strong><p>Had a system installed by us? We would love to hear how it is going.</p></div><a class="btn btn-accent" href="/testimonials#review">Share your review</a></div>`
         : empty('ri-chat-quote-line', 'Verified customer reviews will appear here.');
       return;
     }

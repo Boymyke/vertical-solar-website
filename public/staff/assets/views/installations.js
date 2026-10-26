@@ -1,6 +1,9 @@
 import { $, $$, api, esc, naira, date, datetime, ago, time, toast, fail, table, statusPill, modal, formHtml, readForm, validate, confirmBox, leaflet, baseMap, debounce, bindWidgets } from '../lib.js';
 import { staffOptions } from './customers.js';
-import { scheduleModal, shiftRows, bindShiftActions, avatarOf } from './schedule.js';
+import { scheduleModal, bindShiftActions, avatarOf, shiftDay, prettyDate } from './schedule.js';
+
+const lagosToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+const addDays = (ymd, n) => new Date(Date.parse(ymd + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 import { emptyState } from '../lib.js';
 
 const STATUS = [['scheduled', 'Scheduled'], ['in_progress', 'In progress'], ['on_hold', 'On hold'], ['completed', 'Completed'], ['cancelled', 'Cancelled']];
@@ -50,7 +53,7 @@ async function detail(ctx, id) {
     { name: 'start_date', label: 'Start date', type: 'date' }, { name: 'end_date', label: 'Target finish', type: 'date' },
     { name: 'address', label: 'Site address', type: 'place', full: true, hint: 'Type the address and pick it from the list. The map pin and clock-in zone move there — drag the pin to fine-tune.' },
     { name: 'radius_m', label: 'Clock-in zone', type: 'select', options: [['75', 'Tight — 75 m (small compound)'], ['150', 'Normal — 150 m (most homes)'], ['300', 'Wide — 300 m (estate or plaza)'], ['600', 'Very wide — 600 m (factory or farm)'], ['1000', 'Huge — 1 km']], hint: 'Staff must be inside this circle to clock in.' },
-    { name: 'warranty_months', label: 'Workmanship warranty (months)', type: 'number' }, { name: 'maintenance_interval_months', label: 'Maintenance every (months)', type: 'number' },
+    { name: 'warranty_months', label: 'Workmanship warranty (months)', type: 'number', min: 0, max: 600 }, { name: 'maintenance_interval_months', label: 'Maintenance every (months)', type: 'number', min: 1, max: 60, placeholder: '6' },
     { name: 'notes', label: 'Notes for the crew', type: 'textarea', full: true },
   ];
   root.innerHTML = `
@@ -63,11 +66,10 @@ async function detail(ctx, id) {
   <div class="grid g-2">
     <div class="stack">
       <div class="card"><div class="card-h"><h2>Job details</h2></div><div class="card-b"><form data-f>${formHtml(fields, i)}</form>
-        <div class="row" style="margin-top:14px"><button class="btn btn-primary" data-save><i class="ri-save-line"></i> Save</button>${i.status !== 'completed' ? '<button class="btn btn-accent" data-complete><i class="ri-checkbox-circle-line"></i> Mark completed</button>' : ''}<button class="btn btn-danger" data-del style="margin-left:auto"><i class="ri-delete-bin-line"></i></button></div>
-        <p class="hint small muted">Completing a job sets the next maintenance date, creates a 1-week check-in follow-up and a workmanship warranty automatically.</p></div></div>
-      <div class="card"><div class="card-h"><h2>Crew</h2><button class="btn btn-sm" data-crew><i class="ri-user-add-line"></i> Assign staff</button></div>
-        <div class="list">${d.staff.map((s) => `<div class="li">${avatarOf(s)}<div class="body"><strong>${esc(s.name)}</strong><div class="meta">${esc(s.job_title || '')} ${s.phone ? '· ' + esc(s.phone) : ''}</div></div>${d.attendance.some((a) => a.user_id === s.id && a.status === 'open') ? '<span class="pill ok">On site</span>' : ''}</div>`).join('') || emptyState('ri-team-line', 'No one assigned yet\nAssigned staff see this job in their field app and can clock in here.')}</div></div>
-      <div class="card"><div class="card-h"><div><h2>Schedule</h2><div class="sub">When each person should be on site</div></div><button class="btn btn-sm btn-primary" data-sched><i class="ri-calendar-schedule-line"></i> Schedule staff</button></div><div class="list" data-shifts><div class="loading-row"><span class="spinner"></span></div></div></div>
+        ${i.status !== 'completed' ? '<p class="hint small muted" style="margin:14px 0 0">Completing a job sets the next maintenance date, creates a 1-week check-in follow-up and a workmanship warranty automatically.</p>' : ''}
+        <div class="row form-actions"><button class="btn btn-primary" data-save><i class="ri-save-line"></i> Save</button>${i.status !== 'completed' ? '<button class="btn btn-accent" data-complete><i class="ri-checkbox-circle-line"></i> Mark completed</button>' : ''}<button class="btn btn-danger" data-del style="margin-left:auto" title="Delete this installation" aria-label="Delete this installation"><i class="ri-delete-bin-line"></i></button></div></div></div>
+      <div class="card"><div class="card-h"><div><h2>Crew &amp; schedule</h2><div class="sub">Who is on this job and the days they are expected</div></div><div class="row"><button class="btn btn-sm" data-crew><i class="ri-user-add-line"></i> Assign staff</button><button class="btn btn-sm btn-primary" data-sched><i class="ri-calendar-schedule-line"></i> Schedule days</button></div></div>
+        <div data-crewlist><div class="loading-row"><span class="spinner"></span></div></div></div>
     </div>
     <div class="stack">
       <div class="card"><div class="card-h"><h2>Site location &amp; clock-in zone</h2><button class="btn btn-sm" data-locate><i class="ri-crosshair-2-line"></i> I'm on site now</button></div>
@@ -106,10 +108,18 @@ async function detail(ctx, id) {
   };
   $('[data-complete]', root)?.addEventListener('click', async () => { if (!(await confirmBox('Mark this installation as completed? Warranty, maintenance schedule and a check-in follow-up will be created.', { ok: 'Complete job' }))) return; await api(`/api/admin/installations/${id}`, { method: 'PUT', body: { status: 'completed' } }); toast('Job completed'); detail(ctx, id); });
   $('[data-del]', root).onclick = async () => { if (await confirmBox('Delete this installation and its attendance/report records?', { danger: true, ok: 'Delete' })) { await api(`/api/admin/installations/${id}`, { method: 'DELETE' }); location.hash = '#/installations'; } };
-  $('[data-crew]', root).onclick = () => {
+  $('[data-crew]', root).onclick = async () => {
     const assigned = new Set(d.staff.map((s) => s.id));
-    const { el, close } = modal({ title: 'Assign crew', body: `<div class="stack" style="gap:6px">${users.map((u) => `<label class="check"><input type="checkbox" value="${u.id}" ${assigned.has(u.id) ? 'checked' : ''}><span><strong>${esc(u.name)}</strong> <span class="muted small">${esc(u.job_title || u.role)}</span></span></label>`).join('')}</div>`, footer: '<button class="btn btn-primary" data-ok>Save crew</button>' });
-    $('[data-ok]', el).onclick = async () => { await api(`/api/admin/installations/${id}/staff`, { method: 'PUT', body: { user_ids: $$('input:checked', el).map((x) => Number(x.value)) } }); toast('Crew updated — they have been notified'); close(); detail(ctx, id); };
+    // Who is busy elsewhere while this job runs (its dates, or the next two weeks)?
+    const from = i.start_date || lagosToday(), to = i.end_date || addDays(from, 14);
+    const others = (await api(`/api/admin/shifts?from=${from}&to=${to}`).catch(() => ({ items: [] }))).items.filter((x) => x.installation_id !== Number(id));
+    const staff = users.filter((u) => u.role !== 'owner').sort((a, b) => (assigned.has(b.id) - assigned.has(a.id)) || a.name.localeCompare(b.name));
+    const { el, close } = modal({ title: 'Assign crew', body: `<p class="muted small" style="margin:0 0 10px">Assigned staff see this job in their field app. ${i.end_date ? `This job runs ${esc(prettyDate(from))} – ${esc(prettyDate(to))}; “Busy” means they are expected at another site in that time.` : `“Busy” means they are expected at another site in the two weeks from ${esc(prettyDate(from))}.`}</p>
+      <div class="pick-grid one">${staff.map((u) => { const busy = others.filter((x) => x.user_id === u.id); return `<label class="pick ${busy.length ? 'is-clash' : ''}"><input type="checkbox" value="${u.id}" ${assigned.has(u.id) ? 'checked' : ''}>${avatarOf(u)}<span class="grow"><strong>${esc(u.name)}</strong><span class="small muted">${esc(u.job_title || 'Staff')}</span>
+        <span class="pick-tags">${assigned.has(u.id) ? '<span class="pill ok tx">Already on this job</span>' : ''}${busy.length ? `<span class="pill warn tx" title="${esc(busy.map((x) => `${prettyDate(shiftDay(x))} ${x.start_local} at ${x.site}`).join('\n'))}">Busy: ${esc(busy[0].site)} · ${esc(prettyDate(shiftDay(busy[0])))}${busy.length > 1 ? ` +${busy.length - 1} more` : ''}</span>` : ''}</span></span></label>`; }).join('')}</div>`,
+      footer: '<button class="btn" data-x2>Cancel</button><button class="btn btn-primary" data-ok>Save crew</button>' });
+    $('[data-x2]', el).onclick = close;
+    $('[data-ok]', el).onclick = async () => { await api(`/api/admin/installations/${id}/staff`, { method: 'PUT', body: { user_ids: $$('input:checked', el).map((x) => Number(x.value)) } }); toast('Crew updated — new people have been notified'); close(); detail(ctx, id); };
   };
   $('[data-att]', root).innerHTML = table({ rows: d.attendance, empty: 'No clock-ins yet.', columns: [
     { label: 'Staff', render: (a) => `<strong>${esc(a.user_name)}</strong>` }, { label: 'In', render: (a) => `${datetime(a.clock_in_at)}<div class="muted small">${Math.round(a.in_distance ?? 0)}m from centre</div>` },
@@ -123,12 +133,35 @@ async function detail(ctx, id) {
     $('[data-x2]', el).onclick = close;
     $('[data-ok]', el).onclick = async () => { await api(`/api/admin/work-reports/${b.dataset.review}/review`, { method: 'PUT', body: { note: $('#rv', el).value } }); toast('Reviewed — the crew has been told'); close(); detail(ctx, id); };
   }));
+  // Crew & schedule: one row per person; their days on this job open from a dropdown instead of one long list.
+  const crewBox = $('[data-crewlist]', root);
+  const ST = { arrived: ['ok', 'Arrived'], late: ['warn', 'Running late'], missed: ['bad', 'Missed'], scheduled: ['', 'Expected'] };
+  const dayPill = (x) => { let [c, t] = ST[x.status] || ST.scheduled; if (x.status === 'arrived') [c, t] = x.late_minutes > 10 ? ['warn', `${x.late_minutes} min late`] : ['ok', 'On time']; return `<span class="pill tx ${c}">${t}</span>`; };
   const loadShifts = async () => {
-    const from = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+    const from = addDays(lagosToday(), -7);
     const r = await api(`/api/admin/shifts?installation_id=${id}&from=${from}`);
-    $('[data-shifts]', root).innerHTML = shiftRows(r.items, { showSite: false }) || emptyState('ri-calendar-schedule-line', 'No schedule yet\nSet the date and time each person should be on site. They get reminders, and you are told if they are late.');
+    const byUser = new Map();
+    r.items.forEach((x) => { if (!byUser.has(x.user_id)) byUser.set(x.user_id, []); byUser.get(x.user_id).push(x); });
+    const people = [...d.staff];
+    r.items.forEach((x) => { if (!people.some((p) => p.id === x.user_id)) people.push({ id: x.user_id, name: x.user_name, avatar: x.user_avatar, phone: x.user_phone, extra: true }); });
+    if (!people.length) { crewBox.innerHTML = emptyState('ri-team-line', 'No one on this job yet\nAssign staff, then schedule the days they should be on site. They get reminders, and you are told if they are late.'); return; }
+    const today = lagosToday();
+    crewBox.innerHTML = `<div class="crew">${people.map((p) => {
+      const days = byUser.get(p.id) || [];
+      const next = days.find((x) => shiftDay(x) >= today);
+      const onSite = d.attendance.some((a) => a.user_id === p.id && a.status === 'open');
+      const todayShift = days.find((x) => shiftDay(x) === today);
+      return `<div class="crew-row"><div class="crew-main">${avatarOf(p)}<div class="body"><strong>${esc(p.name)}</strong><div class="meta">${esc(p.job_title || 'Staff')}${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ''}</div>
+          <div class="crew-next">${onSite ? '<span class="pill ok tx"><i class="ri-map-pin-user-line"></i> On site now</span>' : todayShift ? dayPill(todayShift) : ''}${next ? `<span class="muted small"><i class="ri-calendar-line"></i> ${shiftDay(next) === today ? 'Today' : 'Next'}: ${esc(prettyDate(shiftDay(next)))}, ${esc(next.start_local)}${next.end_local ? '–' + esc(next.end_local) : ''}</span>` : '<span class="muted small">No days scheduled</span>'}</div></div>
+          <button class="btn btn-sm" type="button" data-add-days="${p.id}" title="Schedule more days for ${esc(p.name)}"><i class="ri-calendar-event-line"></i> Add days</button></div>
+        ${days.length ? `<details class="crew-days" data-no-accordion><summary><i class="ri-arrow-down-s-line" aria-hidden="true"></i> ${days.length} day${days.length === 1 ? '' : 's'} on this job</summary><div class="crew-day-list">${days.map((x) => `<div class="crew-day"><span class="d">${esc(prettyDate(shiftDay(x)))}</span><span class="t">${esc(x.start_local)}${x.end_local ? '–' + esc(x.end_local) : ''}</span>${dayPill(x)}${x.note ? `<span class="muted small n" title="${esc(x.note)}">${esc(x.note)}</span>` : '<span class="n"></span>'}${x.status === 'scheduled' || x.status === 'late' ? `<button class="icon-btn" type="button" data-cancel-shift="${x.id}" title="Cancel this day" aria-label="Cancel this day"><i class="ri-close-circle-line"></i></button>` : '<span></span>'}</div>`).join('')}</div></details>` : ''}</div>`;
+    }).join('')}</div>`;
   };
-  bindShiftActions($('[data-shifts]', root), loadShifts);
+  bindShiftActions(crewBox, loadShifts);
+  crewBox.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add-days]'); if (!b) return;
+    scheduleModal({ installationId: Number(id), users, assigned: new Set(d.staff.map((s) => s.id)), only: new Set([Number(b.dataset.addDays)]), onSaved: () => detail(ctx, id) });
+  });
   $('[data-sched]', root).onclick = () => scheduleModal({ installationId: Number(id), users, assigned: new Set(d.staff.map((s) => s.id)), onSaved: () => detail(ctx, id) });
   loadShifts();
 }

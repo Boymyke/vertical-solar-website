@@ -61,10 +61,14 @@ function render() {
   $('[data-subtotal]', drawer).textContent = naira(cartTotal());
 }
 
+// 'on' = public shop; 'private' = shop is off but this visitor opened the private link (cart works, menu link stays hidden).
+export const privateShop = () => /(?:^|;\s*)vs_shop=/.test(document.cookie);
 export function initCart(shopEnabled) {
-  document.documentElement.dataset.shop = shopEnabled ? 'on' : 'off';
+  const mode = shopEnabled ? 'on' : privateShop() ? 'private' : 'off';
+  document.documentElement.dataset.shop = mode;
   try { localStorage.setItem('vs-shop', shopEnabled ? 'on' : 'off'); } catch {}
   $$('[data-shop-link]').forEach((el) => (el.hidden = !shopEnabled));
+  $$('[data-cart-link]').forEach((el) => (el.hidden = mode === 'off'));
   render();
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-open-cart]')) { e.preventDefault(); openCart(true); }

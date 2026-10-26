@@ -20,7 +20,9 @@ export const appliance = (k) => APPLIANCES.find((x) => x[0] === k);
 export function size(rows, { lithium = true, night = .6 } = {}) {
   let load = 0, daily = 0, motor = 0;
   rows.forEach((r) => {
-    const a = appliance(r.k); if (!a || !r.q) return;
+    // Custom appliances typed in by the visitor carry their own watts (and hours).
+    const a = r.w ? [r.k, r.name || 'Appliance', r.w, r.h ?? 4, 1, 'ri-plug-line', r.w >= 500] : appliance(r.k);
+    if (!a || !r.q) return;
     load += a[2] * r.q;
     daily += a[2] * r.q * Math.min(24, r.h ?? a[3]) * a[4];
     if (a[6]) motor = Math.max(motor, a[2]);

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 40" width="130" height="40" role="img" aria-label="Oakline Farms">
+<g><path d="M20 37V18" stroke="#7A5A1E" stroke-width="3" stroke-linecap="round"/><path d="M20 20C10 20 6 12 7 4c8 0 13 5 13 16zM20 24c8 0 13-5 13-13-7 0-12 4-13 13z" fill="#7A5A1E"/></g>
+<text x="46" y="20" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#1D2A22">Oakline</text>
+<text x="46.5" y="34" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="10" font-weight="600" letter-spacing="2.4" fill="#7A5A1E">FARMS</text>
+</svg>

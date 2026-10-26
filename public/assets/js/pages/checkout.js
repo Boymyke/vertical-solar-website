@@ -20,7 +20,7 @@ function loadPaystack() {
 }
 
 export default function (site) {
-  if (site && !site.shop.enabled) { location.href = '/shop'; return; }
+  if (site && !site.shop.enabled && !/(?:^|;\s*)vs_shop=/.test(document.cookie)) { location.href = '/shop'; return; }
   summary(site);
   const pk = site?.shop?.paystack_public_key;
   // Card payments stay visible but switched off until Paystack is configured in the CRM.

@@ -1,5 +1,5 @@
 // Server-rendered, crawlable pages for dynamic content + sitemap/robots.
-import { getSettings } from '../lib/site.js';
+import { getSettings, shopOpenFor } from '../lib/site.js';
 import { escapeHtml, parseJSON, stripHtml, naira } from '../lib/util.js';
 
 const abs = (env, p) => (p && /^https?:/.test(p) ? p : (env.SITE_URL || '') + (p || ''));
@@ -127,7 +127,7 @@ ${t.map((x) => `<blockquote class="quote-card"><p>“${escapeHtml(x.quote)}”</
 
   r.get('/shop/:slug', async (req, env, { slug }) => {
     const s = await getSettings(env);
-    if (!s.shop.enabled) return Response.redirect(new URL('/shop', req.url).toString(), 302);
+    if (!(await shopOpenFor(env, req, s))) return Response.redirect(new URL('/shop', req.url).toString(), 302);
     const p = await env.DB.prepare('SELECT * FROM products WHERE slug=? AND in_shop=1 AND active=1').bind(slug).first();
     if (!p) return notFound(env, req);
     const imgs = parseJSON(p.images, []);

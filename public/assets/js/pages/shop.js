@@ -2,7 +2,6 @@
 import { $, $$, api, esc, naira } from '../core.js';
 
 export default async function (site) {
-  if (site && !site.shop.enabled) { $('[data-shop]').hidden = true; $('[data-shop-closed]').hidden = false; return; }
   const list = $('[data-product-list]');
   const state = { cat: new URLSearchParams(location.search).get('category') || '', q: '' };
   async function load() {

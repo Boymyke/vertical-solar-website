@@ -33,6 +33,8 @@ export async function api(path, { method, body, raw } = {}) {
   if (res.status === 401 && !path.startsWith('/api/auth/')) { location.hash = '#/login'; }
   if (res.status === 428) { location.hash = '#/change-password'; }
   if (!res.ok) throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data);
+  // Anything saved or deleted may change the menu counts (follow-ups, issues…): tell the app to refresh them.
+  if (init.method !== 'GET' && path.startsWith('/api/admin/')) window.dispatchEvent(new CustomEvent('vs:changed', { detail: path }));
   return data;
 }
 
@@ -67,9 +69,9 @@ export function modal({ title, body = '', footer = '', size = '', onOpen } = {})
   return { el: m, close };
 }
 
-export function confirmBox(message, { title = 'Are you sure?', ok = 'Confirm', danger = false } = {}) {
+export function confirmBox(message, { title = 'Are you sure?', ok = 'Confirm', danger = false, html = false } = {}) {
   return new Promise((resolve) => {
-    const { el, close } = modal({ title, size: 'narrow', body: `<p style="margin:0">${esc(message)}</p>`,
+    const { el, close } = modal({ title, size: 'narrow', body: html ? message : `<p style="margin:0">${esc(message)}</p>`,
       footer: `<button class="btn" data-no>Cancel</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${esc(ok)}</button>` });
     $('[data-no]', el).onclick = () => { close(); resolve(false); };
     $('[data-yes]', el).onclick = () => { close(); resolve(true); };
@@ -91,6 +93,7 @@ export function fieldHtml(f, value) {
     case 'switch': return `<div class="field ${f.full ? 'full' : ''}"><label class="switch"><input type="checkbox" name="${f.name}" ${v ? 'checked' : ''}><span class="track"></span><span>${esc(f.label)}</span></label>${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
     case 'date': return wrap(`<input class="input" type="date" id="${id}" name="${f.name}" value="${esc(String(v).slice(0, 10))}" ${req}>`);
     case 'datetime': return wrap(`<input class="input" type="datetime-local" id="${id}" name="${f.name}" value="${esc(toLocalInput(v))}" ${req}>`);
+    case 'file': return wrap(`<div class="img-pick file-pick"><div class="stack" style="gap:6px;flex:1"><input class="input" id="${id}" name="${f.name}" value="${esc(v)}" placeholder="Upload a PDF, or paste an https:// link" ${req}><div class="row"><button type="button" class="btn btn-sm" data-upload="${f.name}" data-folder="${f.folder || 'files'}"><i class="ri-upload-2-line"></i> Upload PDF</button>${v ? `<a class="btn btn-sm btn-ghost" href="${esc(v)}" target="_blank" rel="noopener"><i class="ri-external-link-line"></i> Open current file</a>` : ''}</div></div></div>`);
     case 'image': return wrap(`<div class="img-pick"><div class="preview" data-preview style="${v ? `background-image:url('${esc(v)}')` : ''}">${v ? '' : '<i class="ri-image-line"></i>'}</div><div class="stack" style="gap:6px"><input class="input" id="${id}" name="${f.name}" value="${esc(v)}" placeholder="https:// or upload"><div class="row"><button type="button" class="btn btn-sm" data-upload="${f.name}" data-folder="${f.folder || 'website'}"><i class="ri-upload-2-line"></i> Upload</button>${v ? `<button type="button" class="btn btn-sm btn-ghost" data-clear="${f.name}">Remove</button>` : ''}</div></div></div>`);
     case 'images': {
       const arr = Array.isArray(v) ? v : [];
@@ -135,7 +138,7 @@ export function fieldHtml(f, value) {
     }
     case 'json': return wrap(`<textarea class="input" id="${id}" name="${f.name}" rows="${f.rows || 4}" data-json-text style="font-family:ui-monospace,monospace;font-size:12px">${esc(typeof v === 'string' ? v : JSON.stringify(v || (f.empty ?? {}), null, 2))}</textarea>`);
     case 'list': return wrap(`<input class="input" id="${id}" name="${f.name}" value="${esc(Array.isArray(v) ? v.join(', ') : v)}" data-list placeholder="${esc(f.placeholder || 'Comma separated')}">`);
-    default: return wrap(`<input class="input" type="${f.type || 'text'}" id="${id}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min != null ? `min="${f.min}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.readonly ? 'readonly' : ''}>`);
+    default: return wrap(`<input class="input" type="${f.type || 'text'}" id="${id}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min != null ? `min="${f.min}"` : f.type === 'number' && !f.negative ? 'min="0"' : ''}${f.max != null ? ` max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.readonly ? 'readonly' : ''}>`);
   }
 }
 export function formHtml(fields, values = {}) {
@@ -261,7 +264,9 @@ export function bindWidgets(root) {
       try {
         const r = await uploadFiles(files, up.dataset.folder);
         const input = root.querySelector(`[name="${up.dataset.upload}"]`); input.value = r.url;
-        const pv = input.closest('.img-pick').querySelector('[data-preview]'); pv.style.backgroundImage = `url('${r.url}')`; pv.innerHTML = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const pv = input.closest('.img-pick')?.querySelector('[data-preview]'); if (pv) { pv.style.backgroundImage = `url('${r.url}')`; pv.innerHTML = ''; }
+        if (!pv) toast('File uploaded');
       } catch (err) { fail(err); } finally { up.classList.remove('loading'); }
     }
     const clr = e.target.closest('[data-clear]');

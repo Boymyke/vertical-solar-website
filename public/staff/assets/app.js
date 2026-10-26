@@ -1,7 +1,7 @@
 // CRM shell: sign-in, first-time profile, permission-aware navigation, routing, notifications and push alerts.
 import { $, $$, api, esc, initials, toast, ago, modal, debounce, skeleton, validate, markField } from './lib.js';
 
-const V = '2';
+const V = '3';
 const NAV = [
   { group: 'Main menu' },
   { path: 'dashboard', label: 'Dashboard', icon: 'ri-dashboard-line', perm: ['dashboard'] },
@@ -27,13 +27,14 @@ const NAV = [
   { path: 'blog', label: 'Blog', icon: 'ri-article-line', perm: ['blog'] },
   { path: 'email', label: 'Email', icon: 'ri-mail-send-line', perm: ['email'] },
   { group: 'Account' },
+  { path: 'guides', label: 'Guides', icon: 'ri-book-open-line', perm: [], everyone: true },
   { path: 'users', label: 'Staff logins', icon: 'ri-user-settings-line', perm: ['users'] },
   { path: 'settings', label: 'Settings', icon: 'ri-settings-3-line', perm: ['settings', 'shop'] },
 ];
 const VIEWS = {
   dashboard: 'dashboard', customers: 'customers', followups: 'followups', quotes: 'quotes', installations: 'installations', attendance: 'attendance',
   field: 'field', issues: 'issues', inventory: 'inventory', orders: 'orders', support: 'support', maintenance: 'maintenance', warranties: 'maintenance', analytics: 'analytics',
-  chats: 'chats', ai: 'ai', website: 'website', blog: 'blog', email: 'email', users: 'users', settings: 'settings', profile: 'profile', notifications: 'notifications',
+  chats: 'chats', ai: 'ai', website: 'website', blog: 'blog', email: 'email', users: 'users', settings: 'settings', profile: 'profile', notifications: 'notifications', guides: 'guides',
 };
 
 // Every password box gets an eye button to show or hide what was typed.
@@ -58,7 +59,7 @@ new MutationObserver(() => enhancePasswords()).observe(document.documentElement,
 export const state = { user: null, logo: '' };
 export const isOwner = () => state.user?.role === 'owner';
 export const can = (...p) => state.user && (isOwner() || p.some((x) => state.user.permissions.includes(x)));
-const visible = (n) => can(...n.perm) && !(n.staffOnly && isOwner());
+const visible = (n) => (n.everyone || can(...n.perm)) && !(n.staffOnly && isOwner());
 
 async function logoSvg() {
   if (!state.logo) state.logo = (await fetch('/assets/img/logo.svg').then((r) => r.text())).replace(/<style>.*?<\/style>/, '').replace('role="img"', 'aria-hidden="true"');
@@ -215,6 +216,13 @@ export function setTitle(title, sub = '', actions = '') {
 let lastNotifId = 0, notifs = [];
 const NI = { success: ['ri-checkbox-circle-line', 'var(--ok-bg)', 'var(--ok)'], warning: ['ri-alert-line', 'var(--warn-bg)', 'var(--warn)'], danger: ['ri-alarm-warning-line', 'var(--bad-bg)', 'var(--bad)'], info: ['ri-information-line', 'var(--info-bg)', 'var(--info)'] };
 export const notifHtml = (n) => { const [ic, bg, fg] = NI[n.type] || NI.info; const href = (n.link || '#/').replace(/^\/(?:staff|admin)\//, ''); return `<div class="notif ${n.read ? '' : 'unread'}" data-nid="${n.id}"><i class="${ic}" style="background:${bg};color:${fg}" aria-hidden="true"></i><a href="${esc(href)}" data-open><strong>${esc(n.title)}</strong>${n.body ? `<span>${esc(n.body)}</span><br>` : ''}<span>${ago(n.created_at)}</span></a><button class="x" type="button" data-dismiss aria-label="Close this notification" title="Close"><i class="ri-close-line"></i></button></div>`; };
+// Menu counts (due follow-ups, open issues…) refresh right after any change, not only on the next poll.
+let countsTimer = 0;
+async function refreshCounts() {
+  const counts = await api('/api/admin/dashboard-counts').catch(() => null);
+  if (counts) for (const [k, v] of Object.entries(counts)) { const el = $(`[data-count="${k}"]`); if (el) { el.hidden = !v; el.textContent = v; } }
+}
+window.addEventListener('vs:changed', () => { clearTimeout(countsTimer); countsTimer = setTimeout(refreshCounts, 250); });
 async function pollNotifs() {
   try {
     const r = await api('/api/admin/notifications');
@@ -226,8 +234,7 @@ async function pollNotifs() {
       fresh.slice(0, 3).forEach((n) => toast(n.title, n.type === 'danger' ? 'err' : 'ok'));
     }
     lastNotifId = Math.max(lastNotifId, newest);
-    const counts = await api('/api/admin/dashboard-counts').catch(() => null);
-    if (counts) for (const [k, v] of Object.entries(counts)) { const el = $(`[data-count="${k}"]`); if (el) { el.hidden = !v; el.textContent = v; } }
+    await refreshCounts();
     if (!$('[data-notifs]')?.hidden) renderNotifs();
   } catch {}
 }

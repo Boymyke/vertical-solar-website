@@ -4,7 +4,7 @@ import {
   requirePerm, can, audit, notify, hashPassword, generatePassword, MODULE_KEYS, effectivePermissions, rateLimit,
 } from '../lib/auth.js';
 import { crud, inflate } from '../lib/crud.js';
-import { getSettings, DEFAULT_SETTINGS } from '../lib/site.js';
+import { getSettings, DEFAULT_SETTINGS, shopKey, resetShopKey } from '../lib/site.js';
 import {
   str, num, bool, now, parseJSON, randomToken, slugify, nextNumber, isoDate, addMonths, sqlDate, isEmail, normPhone,
   stripHtml, clamp, escapeHtml, naira, sha256,
@@ -267,6 +267,18 @@ export function registerAdmin(r) {
     return ok();
   });
 
+  // Private shop link: lets the team share the shop while it is switched off on the website.
+  r.get('/api/admin/shop-link', async (req, env, _p, ctx) => {
+    requirePerm(ctx.user, 'shop', 'settings');
+    return json({ key: await shopKey(env, true) });
+  });
+  r.post('/api/admin/shop-link/reset', async (req, env, _p, ctx) => {
+    requirePerm(ctx.user, 'shop', 'settings');
+    const key = await resetShopKey(env);
+    await audit(env, req, ctx.user, 'shop_link_reset', 'settings', 'shop');
+    return json({ key });
+  });
+
   // ───────────────────────── Media uploads (R2) ─────────────────────────
   const ALLOWED_TYPES = {
     'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif',
@@ -276,7 +288,7 @@ export function registerAdmin(r) {
     if (!(file instanceof File)) fail(400, 'No file');
     const ext = ALLOWED_TYPES[file.type];
     if (!ext) fail(415, 'Only JPG, PNG, WebP, GIF, AVIF images, MP4/WebM video and PDF files are allowed');
-    const max = file.type.startsWith('video/') ? 95 * 1024 * 1024 : 15 * 1024 * 1024;
+    const max = file.type.startsWith('video/') ? 95 * 1024 * 1024 : file.type === 'application/pdf' ? 40 * 1024 * 1024 : 15 * 1024 * 1024;
     if (file.size > max) fail(413, `File too large (max ${Math.round(max / 1048576)}MB)`);
     const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
     const sig = [...head].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -587,6 +599,9 @@ export function registerAdmin(r) {
     beforeSave: (d, { existing, ctx }) => {
       if (!existing) d.created_by = ctx.user.id;
       if (d.radius_m != null) d.radius_m = clamp(d.radius_m, 30, 5000);
+      if (d.maintenance_interval_months != null && d.maintenance_interval_months < 1) fail(400, 'Maintenance every (months) must be 1 or more');
+      if (d.warranty_months != null && d.warranty_months < 0) fail(400, 'Warranty months cannot be negative');
+      if (d.progress != null) d.progress = clamp(d.progress, 0, 100);
       if (d.status === 'completed' && existing?.status !== 'completed') {
         d.completed_at = now();
         d.progress = 100;
@@ -800,6 +815,21 @@ export function registerAdmin(r) {
 
   crud(r, { name: 'certificates', table: 'certificates', perm: 'website', order: 'sort, id', hasUpdatedAt: false,
     fields: { title: 'str:200', issuer: 'str:160', image: 'str:300', link: 'str:300', issued_at: 'date', published: 'bool', sort: 'int' }, required: ['title'] });
+  // Guides (manuals) inside the app. Everyone signed in reads them; the administrator changes them.
+  r.get('/api/admin/my-guides', async (req, env, _p, ctx) => {
+    const owner = ctx.user.role === 'owner';
+    const { results } = await env.DB.prepare(`SELECT id, title, description, audience, file, pages, sort, active, updated_at FROM guides
+      WHERE ${owner ? '1=1' : "active=1 AND audience='all'"} ORDER BY sort, id`).all();
+    return json({ items: results, can_edit: owner || can(ctx.user, 'settings') });
+  });
+  crud(r, { name: 'guides', table: 'guides', perm: 'settings', order: 'sort, id', hasUpdatedAt: true,
+    fields: { title: 'str:160', description: 'text:600', audience: 'str:10', file: 'str:400', pages: 'int', sort: 'int', active: 'bool' }, required: ['title', 'file'],
+    beforeSave: (d) => {
+      if (d.audience && !['all', 'admin'].includes(d.audience)) d.audience = 'all';
+      if (d.file && !/^\/(media|staff\/assets\/guides)\//.test(d.file) && !/^https:\/\//.test(d.file)) fail(400, 'Upload the guide as a PDF, or paste an https:// link');
+      if (d.pages != null && d.pages < 0) d.pages = null;
+      return d;
+    } });
   crud(r, { name: 'socials', table: 'socials', perm: 'website', order: 'sort, id', hasUpdatedAt: false,
     fields: { platform: 'str:60', icon: 'str:60', url: 'str:300', active: 'bool', sort: 'int' }, required: ['platform', 'icon', 'url'],
     beforeSave: (d) => { if (d.icon && !/^ri-[a-z0-9-]+$/.test(d.icon)) fail(400, 'Choose an icon from the icon picker'); if (d.url && !/^(https?:|mailto:|tel:)/.test(d.url)) fail(400, 'Link must start with https://'); return d; } });

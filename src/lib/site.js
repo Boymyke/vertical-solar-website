@@ -130,3 +130,29 @@ export const SITE_PAGES = [
   ['/support', 'Report a fault / open a support ticket'],
   ['/contact', 'Contact us & branch locations'],
 ];
+
+// The shop can be closed to the public but still opened with a private link (/shop?key=…).
+// The key lives in its own settings row, which getSettings never returns.
+export async function shopKey(env, create = false) {
+  const row = await env.DB.prepare("SELECT value FROM settings WHERE key='shop_private_key'").first();
+  let key = row ? parseJSON(row.value, null) : null;
+  if (!key && create) {
+    key = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(36).padStart(2, '0')).join('').slice(0, 14);
+    await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('shop_private_key', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')").bind(JSON.stringify(key)).run();
+  }
+  return key;
+}
+export async function resetShopKey(env) {
+  await env.DB.prepare("DELETE FROM settings WHERE key='shop_private_key'").run();
+  return shopKey(env, true);
+}
+// Open for this request? Public when switched on; otherwise only with the private key (cookie or ?key=).
+export async function shopOpenFor(env, req, settings) {
+  if (settings.shop.enabled) return true;
+  const u = new URL(req.url);
+  const m = (req.headers.get('cookie') || '').match(/(?:^|;\s*)vs_shop=([A-Za-z0-9]{6,40})/);
+  const given = u.searchParams.get('key') || (m && m[1]);
+  if (!given) return false;
+  const key = await shopKey(env);
+  return !!key && key === given;
+}

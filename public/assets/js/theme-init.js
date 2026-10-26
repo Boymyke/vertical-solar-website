@@ -12,7 +12,11 @@
   d.setAttribute('data-theme', theme);
   d.setAttribute('data-theme-mode', mode);
   // Shop links stay hidden until we know the shop is switched on (remembered from the last visit), so they never flash.
-  d.setAttribute('data-shop', get('vs-shop') === 'on' ? 'on' : 'off');
+  // A private shop link (/shop?key=…) is remembered in a cookie so product pages and checkout keep working.
+  var m = /[?&]key=([A-Za-z0-9]{6,40})/.exec(location.search);
+  if (m && /^\/(shop|checkout)/.test(location.pathname)) document.cookie = 'vs_shop=' + m[1] + '; path=/; max-age=2592000; samesite=lax' + (location.protocol === 'https:' ? '; secure' : '');
+  var priv = /(?:^|;\s*)vs_shop=/.test(document.cookie);
+  d.setAttribute('data-shop', get('vs-shop') === 'on' ? 'on' : priv ? 'private' : 'off');
   var lang = get('vs-lang');
   if (lang) d.setAttribute('lang', lang);
   // Another language: keep the page under a short loading veil until the translation is applied (max 3s).

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 153 40" width="153" height="40" role="img" aria-label="Brightway Foods">
+<g><circle cx="20" cy="20" r="8" fill="#E07A1F"/><g stroke="#E07A1F" stroke-width="3" stroke-linecap="round"><path d="M20 3v5M20 32v5M3 20h5M32 20h5M8 8l3.5 3.5M28.5 28.5L32 32M8 32l3.5-3.5M28.5 11.5L32 8"/></g></g>
+<text x="46" y="20" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#1D2A22">Brightway</text>
+<text x="46.5" y="34" font-family="'Inter Tight','Helvetica Neue',Arial,sans-serif" font-size="10" font-weight="600" letter-spacing="2.4" fill="#E07A1F">FOODS</text>
+</svg>

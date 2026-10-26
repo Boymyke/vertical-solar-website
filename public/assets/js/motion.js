@@ -44,3 +44,30 @@ export function initMotion() {
     const r = el.getBoundingClientRect(); if (r.top < innerHeight) el.classList.add('in');
   }), 4000);
 }
+
+// Headline numbers count up from zero when they first come into view ("500+" rolls 0 → 500, then the "+" stays).
+export function countUp(root = document) {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('a11y-still');
+  root.querySelectorAll('[data-stats] strong, [data-count]').forEach((el) => {
+    if (el.dataset.counted) return;
+    const m = el.textContent.trim().match(/^([\d,]+(?:\.\d+)?)(.*)$/);
+    if (!m) return;
+    el.dataset.counted = '1';
+    const target = Number(m[1].replace(/,/g, '')), tail = m[2], dec = (m[1].split('.')[1] || '').length;
+    if (still || !target) return;
+    const fmt = (v) => (dec ? v.toFixed(dec) : Math.round(v).toLocaleString()) + tail;
+    el.style.minWidth = `${el.getBoundingClientRect().width}px`; // no jiggle while digits change
+    el.textContent = fmt(0);
+    const run = () => {
+      const t0 = performance.now(), dur = 1800;
+      const tick = (now) => {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(2, -10 * p); // ease-out
+        el.textContent = fmt(p >= 1 ? target : target * e);
+        if (p < 1) requestAnimationFrame(tick); else el.style.minWidth = '';
+      };
+      requestAnimationFrame(tick);
+    };
+    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) { io.disconnect(); setTimeout(run, el.closest('.hero') ? 450 : 0); } }, { threshold: .4 });
+    io.observe(el);
+  });
+}

@@ -1,7 +1,7 @@
 // Public (unauthenticated) API used by the website.
 import { json, ok, fail, readJson, clientIp } from '../lib/http.js';
 import { rateLimit, verifyTurnstile, notify, getSessionUser } from '../lib/auth.js';
-import { getPublicSite, getSettings } from '../lib/site.js';
+import { getPublicSite, getSettings, shopOpenFor } from '../lib/site.js';
 import { str, num, isEmail, normPhone, parseJSON, parseUA, now, nextNumber, clamp } from '../lib/util.js';
 
 const cacheJson = (data, seconds = 60) =>
@@ -156,7 +156,9 @@ export function registerPublic(r) {
 
   r.get('/api/public/products', async (req, env) => {
     const settings = await getSettings(env);
-    if (!settings.shop.enabled) return cacheJson({ enabled: false, items: [] });
+    const priv = !settings.shop.enabled;
+    // Never cache the closed answer: the same browser may open the private link a moment later.
+    if (priv && !(await shopOpenFor(env, req, settings))) return json({ enabled: false, items: [] }, 200, { 'cache-control': 'no-store' });
     const u = new URL(req.url);
     const cat = u.searchParams.get('category');
     const q = str(u.searchParams.get('q'), 80);
@@ -166,18 +168,20 @@ export function registerPublic(r) {
     if (q) { sql += ' AND (name LIKE ? OR brand LIKE ?)'; args.push(`%${q}%`, `%${q}%`); }
     sql += ' ORDER BY featured DESC, name LIMIT 200';
     const { results } = await env.DB.prepare(sql).bind(...args).all();
-    return cacheJson({
-      enabled: true,
+    const out = {
+      enabled: true, private: priv,
       items: results.map((p) => ({ ...p, specs: parseJSON(p.specs, {}), images: parseJSON(p.images, []), in_stock: p.stock > 0, stock: undefined })),
-    }, 30);
+    };
+    return priv ? json(out, 200, { 'cache-control': 'private, no-store' }) : cacheJson(out, 30);
   });
 
   r.get('/api/public/products/:slug', async (req, env, { slug }) => {
     const settings = await getSettings(env);
-    if (!settings.shop.enabled) fail(404, 'Shop is closed');
+    if (!(await shopOpenFor(env, req, settings))) fail(404, 'Shop is closed');
     const p = await env.DB.prepare('SELECT id,slug,name,category,brand,description,specs,price,compare_price,stock,images,warranty_months FROM products WHERE slug=? AND in_shop=1 AND active=1').bind(slug).first();
     if (!p) fail(404, 'Product not found');
-    return cacheJson({ ...p, specs: parseJSON(p.specs, {}), images: parseJSON(p.images, []), in_stock: p.stock > 0, stock: undefined });
+    const item = { ...p, specs: parseJSON(p.specs, {}), images: parseJSON(p.images, []), in_stock: p.stock > 0, stock: undefined };
+    return settings.shop.enabled ? cacheJson(item) : json(item, 200, { 'cache-control': 'private, no-store' });
   });
 
   // Contact / quote / package / promo / callback forms → CRM lead
@@ -242,6 +246,32 @@ export function registerPublic(r) {
     return ok({ number, message: `Ticket ${number} received. Our support team will respond shortly.` });
   });
 
+  // Customer reviews arrive unpublished; the team checks them in Website content → Testimonials.
+  r.post('/api/public/review', async (req, env) => {
+    const ip = clientIp(req);
+    await rateLimit(env, `review:${ip}`, 4, 3600);
+    const b = await readJson(req, 16 * 1024);
+    honeypot(b);
+    await verifyTurnstile(env, b.turnstile, ip);
+    const name = str(b.name, 120), quote = str(b.quote, 2000), contact = str(b.contact, 160);
+    const rating = clamp(Math.round(num(b.rating)), 1, 5);
+    if (!name) fail(400, 'Please tell us your name');
+    if (!rating) fail(400, 'Please choose a star rating');
+    if (!quote || quote.length < 20) fail(400, 'Please write a few words about your experience (at least 20 characters)');
+    if (!b.consent) fail(400, 'Please tick the box so we can publish your review');
+    // Match the reviewer to a customer when they gave a phone number or email.
+    let customer = null;
+    const phone = normPhone(contact);
+    if (phone) customer = await env.DB.prepare('SELECT id FROM customers WHERE phone = ? LIMIT 1').bind(phone).first();
+    if (!customer && isEmail(contact)) customer = await env.DB.prepare('SELECT id FROM customers WHERE email = ? COLLATE NOCASE LIMIT 1').bind(contact).first();
+    const r = await env.DB.prepare(`INSERT INTO testimonials (name, role, location, quote, rating, system, customer_id, consent, published, verified, sort)
+        VALUES (?, 'Customer', ?, ?, ?, ?, ?, 1, 0, 0, 0) RETURNING id`)
+      .bind(name, str(b.location, 120) || null, quote, rating, str(b.system, 200) || null, customer?.id || null).first();
+    if (customer) await env.DB.prepare(`INSERT INTO activities (customer_id, type, body) VALUES (?, 'system', ?)`).bind(customer.id, `Left a ${rating}-star review on the website`).run();
+    await notify(env, { module: 'website', type: 'info', title: `New ${rating}-star review from ${name}`, body: `${quote.slice(0, 110)}${quote.length > 110 ? '…' : ''}${contact ? ` · ${contact}` : ''}`, link: '/staff/#/website/testimonials' });
+    return ok({ id: r.id, message: 'Our team will read it and publish it on the website soon.' });
+  });
+
   r.post('/api/public/subscribe', async (req, env) => {
     await rateLimit(env, `sub:${clientIp(req)}`, 5, 600);
     const b = await readJson(req, 4096);
@@ -256,7 +286,7 @@ export function registerPublic(r) {
     const ip = clientIp(req);
     await rateLimit(env, `order:${ip}`, 6, 600);
     const settings = await getSettings(env);
-    if (!settings.shop.enabled) fail(403, 'The online shop is currently closed');
+    if (!(await shopOpenFor(env, req, settings))) fail(403, 'The online shop is currently closed');
     const b = await readJson(req, 64 * 1024);
     honeypot(b);
     await verifyTurnstile(env, b.turnstile, ip);

@@ -16,10 +16,27 @@
     <div class="grid-3" data-testimonials><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
   </div>
 </section>
-<section class="section-tight">
-  <div class="wrap-narrow card" style="text-align:center">
-    <h2 style="font-size:var(--fs-4)">Are you a Vertical Solar customer?</h2>
-    <p class="muted">We would love to hear how your system is doing. Send us your review and a photo of your installation.</p>
-    <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" data-whatsapp="Hello Vertical Solar, I'd like to share a review of my installation." href="#"><i class="ri-whatsapp-line" aria-hidden="true"></i> Share your review</a></div>
+<section class="section-tight" id="review" aria-labelledby="review-title">
+  <div class="wrap-narrow card review-card">
+    <h2 id="review-title">Share your review</h2>
+    <p class="muted">Had a system installed by us? Tell other customers how it is going. Our team reads every review before it appears on the website.</p>
+    <form class="form" data-form="review" data-success="replace" data-success-title="Thank you for your review">
+      <fieldset class="stars-field">
+        <legend>Your rating</legend>
+        <div class="stars" role="radiogroup" aria-label="Rating out of 5">
+          <input type="radio" id="rv-5" name="rating" value="5" required><label for="rv-5" title="5 stars — Excellent"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">5 stars</span></label>
+          <input type="radio" id="rv-4" name="rating" value="4"><label for="rv-4" title="4 stars — Good"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">4 stars</span></label>
+          <input type="radio" id="rv-3" name="rating" value="3"><label for="rv-3" title="3 stars — Okay"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">3 stars</span></label>
+          <input type="radio" id="rv-2" name="rating" value="2"><label for="rv-2" title="2 stars — Poor"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">2 stars</span></label>
+          <input type="radio" id="rv-1" name="rating" value="1"><label for="rv-1" title="1 star — Bad"><i class="ri-star-fill" aria-hidden="true"></i><span class="sr-only">1 star</span></label>
+        </div>
+      </fieldset>
+      <div class="form-row"><div class="field"><label for="rv-name">Your name</label><input id="rv-name" name="name" required maxlength="120" autocomplete="name"></div><div class="field"><label for="rv-loc">Area or city <span class="opt">(optional)</span></label><input id="rv-loc" name="location" maxlength="120" placeholder="e.g. Lekki, Lagos"></div></div>
+      <div class="form-row"><div class="field"><label for="rv-phone">Phone or email <span class="opt">(not shown)</span></label><input id="rv-phone" name="contact" maxlength="160" autocomplete="tel" placeholder="So we can match your installation"></div><div class="field"><label for="rv-sys">System installed <span class="opt">(optional)</span></label><input id="rv-sys" name="system" maxlength="200" placeholder="e.g. 5kVA with lithium battery"></div></div>
+      <div class="field"><label for="rv-msg">Your review</label><textarea id="rv-msg" name="quote" required minlength="20" maxlength="2000" placeholder="How has the system worked for you? What changed at home or at work?"></textarea></div>
+      <label class="check"><input type="checkbox" name="consent" value="1" required> <span>Vertical Solar may publish my review with my first name and area on this website.</span></label>
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button class="btn btn-primary" type="submit"><i class="ri-send-plane-line" aria-hidden="true"></i> Send review</button>
+    </form>
   </div>
 </section>

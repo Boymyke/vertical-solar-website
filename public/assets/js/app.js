@@ -6,28 +6,35 @@ import { initTracking, trackEvent } from './track.js';
 import { initCart } from './cart.js';
 import { initChat } from './chat.js';
 import { mountVideo } from './media.js';
-import { initMotion } from './motion.js';
+import { initMotion, countUp } from './motion.js';
 export { mountVideo };
 
 const html = document.documentElement;
 
 /* ── Theme: day / night. Until the visitor picks one, the site quietly matches the time in Lagos. ── */
 function initTheme() {
-  const btns = $$('[data-set-theme]');
-  const sync = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.setTheme === html.dataset.theme)));
+  const btn = $('[data-theme-toggle]');
+  // One button: it shows the mode you will switch to (moon by day, sun by night).
+  const sync = () => {
+    if (!btn) return;
+    const night = html.dataset.theme === 'night';
+    const label = night ? 'Switch to day mode' : 'Switch to night mode';
+    btn.innerHTML = `<i class="${night ? 'ri-sun-line' : 'ri-moon-clear-line'}" aria-hidden="true"></i>`;
+    btn.setAttribute('aria-label', label); btn.title = label;
+  };
   // The hero's night photo is decoded before switching, so the lights fade on smoothly instead of popping in.
   const nightImg = $('[data-night-img]');
   const ready = () => (!nightImg || (nightImg.complete && nightImg.naturalWidth) ? Promise.resolve() : Promise.race([nightImg.decode().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]));
   if (nightImg) (window.requestIdleCallback || setTimeout)(() => nightImg.decode?.().catch(() => {}));
-  btns.forEach((b) => b.addEventListener('click', async () => {
-    const next = b.dataset.setTheme;
+  btn?.addEventListener('click', async () => {
+    const next = html.dataset.theme === 'night' ? 'day' : 'night';
     if (next === 'night') await ready();
     html.dataset.themeMode = next;
     html.dataset.theme = next;
     try { localStorage.setItem('vs-theme', next); } catch {}
     sync();
     window.dispatchEvent(new Event('vs:theme'));
-  }));
+  });
   sync();
 }
 
@@ -42,7 +49,7 @@ function initNav() {
     nav.classList.toggle('open', open); header.classList.toggle('is-open', open);
     toggle.setAttribute('aria-expanded', open);
     toggle.innerHTML = `<i class="${open ? 'ri-close-line' : 'ri-menu-3-line'}" aria-hidden="true"></i>`;
-    document.body.style.overflow = open ? 'hidden' : '';
+    document.documentElement.style.overflow = open ? 'hidden' : ''; // on <html>: hiding <body> overflow would unstick the header
   });
   $$('.has-sub > .nav-trigger').forEach((b) => b.addEventListener('click', () => {
     const li = b.parentElement; const open = !li.classList.contains('open');
@@ -80,7 +87,10 @@ function renderSite(site) {
   });
   // Stats from settings
   $$('[data-stats]').forEach((el) => {
-    el.innerHTML = site.stats.map((s) => `<div><strong>${s.plain ? s.value : Number(s.value).toLocaleString()}${esc(s.suffix || '')}</strong><span>${esc(s.label)}</span></div>`).join('');
+    const html = site.stats.map((s) => `<div><strong translate="no">${s.plain ? s.value : Number(s.value).toLocaleString()}${esc(s.suffix || '')}</strong><span>${esc(s.label)}</span></div>`).join('');
+    if (el.dataset.statsHtml === html) return; // unchanged: keep the count-up running
+    el.dataset.statsHtml = html; el.innerHTML = html;
+    countUp(el);
   });
   if (site.features?.blog_enabled === false) $$('a[href="/blog"]').forEach((a) => (a.closest('li') || a).setAttribute('hidden', ''));
   if (site.features?.testimonials_enabled === false) $$('[data-testimonials-section], a[href="/testimonials"]').forEach((el) => (el.closest('li') || el).setAttribute('hidden', ''));
@@ -119,13 +129,13 @@ function initForms() {
     if (form.dataset.extra) Object.assign(body, JSON.parse(form.dataset.extra));
     const btn = form.querySelector('[type="submit"]');
     btn?.classList.add('is-loading');
-    const endpoint = { lead: '/api/public/lead', ticket: '/api/public/ticket', subscribe: '/api/public/subscribe' }[form.dataset.form];
+    const endpoint = { lead: '/api/public/lead', ticket: '/api/public/ticket', subscribe: '/api/public/subscribe', review: '/api/public/review' }[form.dataset.form];
     try {
       const r = await api(endpoint, { body });
       trackEvent(`form_${form.dataset.form}`, { kind: body.kind });
       if (form.dataset.success === 'replace') {
         form.innerHTML = `<div class="form-success" role="status"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><h3>${esc(form.dataset.successTitle || 'Thank you!')}</h3><p class="muted">${esc(r.message || '')}</p>
-          ${form.dataset.form !== 'subscribe' ? `<a class="btn btn-ghost" data-whatsapp href="#"><i class="ri-whatsapp-line" aria-hidden="true"></i> Continue on WhatsApp</a>` : ''}</div>`;
+          ${!['subscribe', 'review'].includes(form.dataset.form) ? `<a class="btn btn-ghost" data-whatsapp href="#"><i class="ri-whatsapp-line" aria-hidden="true"></i> Continue on WhatsApp</a>` : ''}</div>`;
         renderSite(await getSite());
       } else {
         status.className = 'form-status ok'; status.hidden = false;
@@ -284,6 +294,38 @@ function initMisc() {
   });
 }
 
+/* ── Accordions: one answer open at a time per list, opening and closing smoothly ── */
+function initAccordions() {
+  const anims = new WeakMap();
+  const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches || html.classList.contains('a11y-still');
+  const toggle = (d, open) => {
+    if (d.open === open && !anims.get(d)) return;
+    if (still()) { d.open = open; return; }
+    anims.get(d)?.cancel();
+    const sum = d.querySelector(':scope > summary');
+    const start = d.getBoundingClientRect().height;
+    d.open = true;
+    const cs = getComputedStyle(d);
+    const closed = sum.getBoundingClientRect().height + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    const end = open ? d.getBoundingClientRect().height : closed;
+    d.style.overflow = 'hidden';
+    d.classList.toggle('is-closing', !open);
+    const an = d.animate([{ height: `${start}px` }, { height: `${end}px` }], { duration: open ? 420 : 320, easing: 'cubic-bezier(.16, 1, .3, 1)' });
+    anims.set(d, an);
+    an.onfinish = () => { anims.delete(d); d.style.overflow = ''; d.classList.remove('is-closing'); if (!open) d.open = false; };
+    an.oncancel = () => { anims.delete(d); d.style.overflow = ''; d.classList.remove('is-closing'); };
+  };
+  document.addEventListener('click', (e) => {
+    const sum = e.target.closest('details > summary'); if (!sum || e.target.closest('a, button, input')) return;
+    const d = sum.parentElement;
+    if (d.closest('.modal, .chat-panel, [data-no-accordion]')) return;
+    e.preventDefault();
+    const open = !(d.open && !d.classList.contains('is-closing'));
+    if (open) [...d.parentElement.children].forEach((x) => x !== d && x.tagName === 'DETAILS' && x.open && toggle(x, false));
+    toggle(d, open);
+  });
+}
+
 async function boot() {
   initMotion();
   initTheme();
@@ -292,10 +334,12 @@ async function boot() {
   initA11y();
   initMedia();
   initMisc();
+  initAccordions();
   initForms();
   initTracking();
   const site = await getSite();
   renderSite(site);
+  countUp();
   initCart(site ? !!site.shop.enabled : document.documentElement.dataset.shop === 'on');
   initChat();
   initConsent(site);
