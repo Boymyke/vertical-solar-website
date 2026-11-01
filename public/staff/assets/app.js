@@ -2,6 +2,10 @@
 import { $, $$, api, esc, initials, toast, ago, modal, debounce, skeleton, validate, markField } from './lib.js';
 
 const V = '3';
+// Two doors into the same app: /verticaladmin is the administrator's, /staff is everyone else's.
+export const PORTAL = location.pathname.startsWith('/verticaladmin') ? 'admin' : 'staff';
+export const BASE = PORTAL === 'admin' ? '/verticaladmin' : '/staff';
+
 const NAV = [
   { group: 'Main menu' },
   { path: 'dashboard', label: 'Dashboard', icon: 'ri-dashboard-line', perm: ['dashboard'] },
@@ -71,14 +75,15 @@ async function authScreen(kind) {
   const logo = await logoSvg();
   const root = $('#root');
   const status = await api('/api/auth/status').catch(() => ({ needs_setup: false }));
+  if (status.needs_setup && PORTAL !== 'admin') { location.replace('/verticaladmin/'); return; } // first setup happens on the administrator's page
   if (status.needs_setup && kind !== 'setup') kind = 'setup';
   const pwHint = '<span class="hint">At least 10 characters, with upper and lower case letters and a number.</span>';
   const forms = {
-    login: `<h1>Welcome back</h1><p class="muted" style="margin:0 0 24px">Sign in with your work email and password.</p>
+    login: `<h1>${PORTAL === 'admin' ? 'Administrator sign in' : 'Welcome back'}</h1><p class="muted" style="margin:0 0 24px">${PORTAL === 'admin' ? 'For the administrator only. Staff sign in at /staff.' : 'Sign in with your work email and password.'}</p>
       <form class="stack" data-login novalidate><div class="field"><label for="em">Work email</label><input class="input" id="em" name="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="pw">Password</label><input class="input" id="pw" name="password" type="password" required autocomplete="current-password"></div>
       <div class="alert err" hidden data-err></div><button class="btn btn-primary btn-lg" type="submit">Sign in</button>
-      <p class="muted small" style="margin:0">Forgot your password? Ask the administrator to reset it from Staff logins.</p></form>`,
+      <p class="muted small" style="margin:0">${PORTAL === 'admin' ? 'Forgot your password? Ask your developer for a one-time reset link.' : 'Forgot your password? Ask the administrator to reset it from Staff logins.'}</p></form>`,
     setup: `<h1>Set up your CRM</h1><p class="muted" style="margin:0 0 24px">Create the administrator account. You'll need the one-time setup code you were given.</p>
       <form class="stack" data-setup novalidate><div class="field"><label for="sc">Setup code</label><input class="input" id="sc" name="setup_code" required autocomplete="one-time-code"></div>
       <div class="field"><label for="nm">Your full name</label><input class="input" id="nm" name="name" required autocomplete="name"></div>
@@ -98,6 +103,7 @@ async function authScreen(kind) {
     if (!validate(form)) return;
     const btn = $('[type=submit]', form); btn.classList.add('loading');
     const body = Object.fromEntries(new FormData(form).entries());
+    body.portal = PORTAL;
     try {
       if (kind === 'login') { const r = await api('/api/auth/login', { body }); location.hash = r.must_change_password ? '#/change-password' : '#/'; }
       if (kind === 'setup') { await api('/api/auth/setup', { body }); location.hash = '#/'; }
@@ -273,7 +279,7 @@ const b64ToBytes = (s) => { const p = '='.repeat((4 - (s.length % 4)) % 4); cons
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
-    const reg = await navigator.serviceWorker.register('/staff/sw.js', { scope: '/staff/' });
+    const reg = await navigator.serviceWorker.register(`${BASE}/sw.js`, { scope: `${BASE}/` });
     if (Notification.permission === 'granted') await enablePush(false, reg);
     else if (Notification.permission === 'default') $('[data-push-card]')?.removeAttribute('hidden');
   } catch (e) { console.warn('push setup', e); }
@@ -282,7 +288,7 @@ export async function enablePush(ask, reg) {
   try {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) { if (ask) toast('This browser cannot show alerts. On iPhone, add the app to your Home Screen first.', 'err'); return false; }
     if (ask && Notification.permission !== 'granted') { const p = await Notification.requestPermission(); if (p !== 'granted') { toast('Alerts stay off. You can turn them on later from your profile.', 'err'); return false; } }
-    reg = reg || (await navigator.serviceWorker.register('/staff/sw.js', { scope: '/staff/' }));
+    reg = reg || (await navigator.serviceWorker.register(`${BASE}/sw.js`, { scope: `${BASE}/` }));
     await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) { const { key } = await api('/api/admin/push/key'); sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) }); }
@@ -323,6 +329,9 @@ async function route() {
   if (!state.user) {
     try { state.user = await api('/api/auth/me'); }
     catch { return authScreen('login'); }
+    // Signed in at the wrong door: the administrator always works from /verticaladmin, staff from /staff.
+    const owner = state.user.role === 'owner';
+    if ((PORTAL === 'admin') !== owner) { location.replace(`${owner ? '/verticaladmin' : '/staff'}/${location.hash}`); return; }
     if (state.user.must_change_password) return authScreen('change-password');
     if (!state.user.profile_complete) return onboarding();
     await layout();

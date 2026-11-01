@@ -31,6 +31,8 @@
       "/robots.txt",
       "/admin",
       "/admin/*",
+      "/verticaladmin",
+      "/verticaladmin/*",
       "/staff",
       "/staff/*",
       "!/staff/assets/*"

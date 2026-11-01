@@ -57,6 +57,9 @@ export function registerAuth(r) {
       await audit(env, req, { id: u.id }, 'login_failed', 'users', u.id);
       fail(401, generic);
     }
+    // The administrator's page (/verticaladmin) is for the administrator only. (If the administrator signs in
+    // at /staff — e.g. from an email link — the app moves them to /verticaladmin.)
+    if (b.portal === 'admin' && u.role !== 'owner') fail(403, 'This sign-in page is for the administrator only. Staff sign in at /staff.');
     await env.DB.prepare('UPDATE users SET failed_logins=0, locked_until=NULL, last_login_at=? WHERE id=?').bind(now(), u.id).run();
     await env.DB.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
     const cookie = await createSession(env, req, u.id);

@@ -1,5 +1,7 @@
 // CRM service worker: shows reminders and alerts on the phone when the app is closed.
 // Pushes carry no data; we fetch the newest notification for the signed-in person.
+// The same worker runs at /staff/ (staff) and /verticaladmin/ (administrator); links open in whichever this is.
+const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
@@ -11,7 +13,7 @@ self.addEventListener('push', (event) => {
       if (r.ok) item = (await r.json()).item;
     } catch {}
     const title = item?.title || 'Vertical Solar';
-    const link = /^\/(staff|admin)/.test(item?.link || '') ? item.link.replace(/^\/admin/, '/staff') : `/staff/${(item?.link || '#/').replace(/^\/?/, '')}`;
+    const link = /^\/(staff|admin|verticaladmin)\//.test(item?.link || '') ? item.link.replace(/^\/(staff|admin|verticaladmin)/, BASE) : `${BASE}/${(item?.link || '#/').replace(/^\/?/, '')}`;
     await self.registration.showNotification(title, {
       body: item?.body || 'You have a new update. Tap to open.',
       icon: '/assets/img/icon-192.png', badge: '/assets/img/favicon-32.png',
@@ -24,10 +26,10 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.link || '/staff/#/', self.location.origin).href;
+  const url = new URL(event.notification.data?.link || `${BASE}/#/`, self.location.origin).href;
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const open = all.find((c) => c.url.includes('/staff'));
+    const open = all.find((c) => new URL(c.url).pathname.startsWith(BASE));
     if (open) { await open.focus(); return open.navigate(url).catch(() => {}); }
     return self.clients.openWindow(url);
   })());

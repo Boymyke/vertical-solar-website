@@ -29,9 +29,12 @@ function sameOrigin(req) {
   return new URL(origin).host === new URL(req.url).host;
 }
 
-async function serveAdminShell(req, env) {
+async function serveAdminShell(req, env, portal = 'staff') {
   const res = await env.ASSETS.fetch(new Request(new URL('/staff/app', req.url)));
-  const out = new Response(res.body, res);
+  let body = res.body;
+  // The administrator's door installs as its own app (its own manifest and start page).
+  if (portal === 'admin') body = (await res.text()).replace('/staff/assets/manifest.webmanifest', '/staff/assets/manifest-admin.webmanifest').replace('<title>Vertical Solar CRM</title>', '<title>Vertical Solar — Administrator</title>');
+  const out = new Response(body, res);
   out.headers.set('x-robots-tag', 'noindex, nofollow');
   out.headers.set('cache-control', 'no-cache');
   return out;
@@ -49,6 +52,16 @@ async function handle(req, env, ctx) {
   // The workspace moved from /admin to /staff; old bookmarks and notification links keep working.
   if (path === '/admin' || path.startsWith('/admin/')) {
     return new Response(null, { status: 301, headers: { location: '/staff' + path.slice(6) + url.search } });
+  }
+  // The administrator's own door into the app. Staff use /staff.
+  if (path === '/verticaladmin' || path.startsWith('/verticaladmin/')) {
+    if (path === '/verticaladmin/sw.js') {
+      const sw = await env.ASSETS.fetch(new Request(new URL('/staff/sw.js', req.url)));
+      const out = new Response(sw.body, sw); out.headers.set('cache-control', 'no-cache'); out.headers.set('content-type', 'text/javascript; charset=utf-8');
+      return out;
+    }
+    if (/\.[a-z0-9]{2,5}$/i.test(path)) return new Response('Not found', { status: 404 });
+    return serveAdminShell(req, env, 'admin');
   }
   if (path === '/staff' || (path.startsWith('/staff/') && !path.startsWith('/staff/assets/'))) {
     if (path === '/staff/app' || path === '/staff/app.html') return serveAdminShell(req, env);

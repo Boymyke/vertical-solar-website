@@ -3,7 +3,7 @@
 The public website for **Vertical Solar (Vertical Energy & Networks Ltd)** and the CRM behind it, running as one Cloudflare Worker.
 
 - **Website**: 27 pages, day/night hero (night switches the house lights on), homepage cost estimator, packages and detailed load calculator, projects, shop (switchable), blog, solar care guide, FAQ, three-step quote request with address search, support tickets, English / Igbo / Hausa / Yoruba, accessibility panel, AI assistant "Vola" (expandable, speaks and understands English, Pidgin, Yoruba, Igbo and Hausa).
-- **CRM** at `/staff`: one administrator (the owner), everyone else is staff. Dashboard, customers & pipeline, follow-ups, quotation engine (link + PDF + online acceptance), installations with address search and clock-in zones, staff schedules with "starting soon" / "running late" reminders, staff profiles collected on first sign-in, on-site issue reports, attendance with geofenced clock-in, field app for technicians, inventory, shop orders, support tickets, maintenance & warranties, visitor analytics & heatmaps, chat inbox, AI sales assistant, email, website CMS (pop-up builder, policies, certificates, socials, testimonials, FAQs, packages, branches), blog, staff logins, settings, phone push alerts.
+- **CRM**: the administrator (owner) works at `/verticaladmin`; everyone else signs in at `/staff`. Staff cannot sign in at `/verticaladmin`, and an administrator who opens `/staff` is moved to `/verticaladmin`. Dashboard, customers & pipeline, follow-ups, quotation engine (link + PDF + online acceptance), installations with address search and clock-in zones, staff schedules with "starting soon" / "running late" reminders, staff profiles collected on first sign-in, on-site issue reports, attendance with geofenced clock-in, field app for technicians, inventory, shop orders, support tickets, maintenance & warranties, visitor analytics & heatmaps, chat inbox, AI sales assistant, email, website CMS (pop-up builder, policies, certificates, socials, testimonials, FAQs, packages, branches), blog, staff logins, settings, phone push alerts.
 
 ## Stack
 
@@ -31,7 +31,7 @@ The D1 database and R2 bucket already exist in the Cloudflare account and the da
    - Root directory: `/`
 3. Deploy. Every push to `main` redeploys automatically.
 4. Worker → **Settings → Domains & Routes** → add `verticalsolar.com.ng` and `www.verticalsolar.com.ng` (the domain's DNS must be on Cloudflare).
-5. Open `/staff` and complete first-time setup with the one-time setup code you were given. The code is deleted once the owner account exists.
+5. Open `/verticaladmin` and complete first-time setup with the one-time setup code you were given. The code is deleted once the owner account exists.
 
 ### Optional secrets
 
